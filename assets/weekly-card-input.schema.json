@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/weekly-card-input.json",
+  "title": "Normalized weekly feedback card input",
+  "type": "object",
+  "required": [
+    "outTrackId",
+    "title",
+    "icon",
+    "reportUrl",
+    "summaryMarkdown",
+    "feedbackGuide",
+    "reportPeriod",
+    "customer",
+    "week",
+    "collector",
+    "reportTime",
+    "recipientUserId",
+    "projects"
+  ],
+  "properties": {
+    "outTrackId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "reportUrl": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "summaryMarkdown": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "feedbackGuide": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "reportPeriod": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "customer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "week": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-W(?:0[1-9]|[1-4][0-9]|5[0-3])$"
+    },
+    "collector": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "reportTime": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$"
+    },
+    "recipientUserId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[^;\\s]+$"
+    },
+    "projects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

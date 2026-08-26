@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/dingtalk-create-and-deliver.json",
+  "title": "DingTalk createAndDeliver weekly feedback card request",
+  "type": "object",
+  "required": [
+    "cardTemplateId",
+    "outTrackId",
+    "callbackType",
+    "callbackRouteKey",
+    "openSpaceId",
+    "cardData",
+    "imRobotOpenSpaceModel",
+    "imRobotOpenDeliverModel",
+    "userIdType"
+  ],
+  "properties": {
+    "cardTemplateId": {
+      "const": "3ff383e6-adfa-4117-a10f-6691f6eec086.schema"
+    },
+    "outTrackId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "callbackType": {
+      "const": "HTTP"
+    },
+    "callbackRouteKey": {
+      "const": "customer_feedback_aitable_v1"
+    },
+    "openSpaceId": {
+      "type": "string",
+      "pattern": "^dtv1\\.card//IM_ROBOT\\.[^;\\s]+$"
+    },
+    "cardData": {
+      "type": "object",
+      "required": [
+        "cardParamMap"
+      ],
+      "properties": {
+        "cardParamMap": {
+          "type": "object",
+          "required": [
+            "title",
+            "icon",
+            "reportUrl",
+            "summaryMarkdown",
+            "weeklySummary",
+            "feedbackGuide",
+            "reportPeriod",
+            "feedbackForm",
+            "satisfactionOptions",
+            "submitButtonText",
+            "formState"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "icon": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "reportUrl": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "summaryMarkdown": {
+              "type": "string",
+              "minLength": 1
+            },
+            "weeklySummary": {
+              "type": "string",
+              "minLength": 1
+            },
+            "feedbackGuide": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reportPeriod": {
+              "type": "string",
+              "minLength": 1
+            },
+            "feedbackForm": {
+              "type": "string",
+              "minLength": 2,
+              "$comment": "JSON-encoded object validated separately with feedback-form.schema.json"
+            },
+            "satisfactionOptions": {
+              "type": "string",
+              "minLength": 2,
+              "$comment": "JSON-encoded array validated separately with satisfaction-options.schema.json"
+            },
+            "submitButtonText": {
+              "const": "提交"
+            },
+            "formState": {
+              "const": "normal"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "imRobotOpenSpaceModel": {
+      "type": "object",
+      "required": [
+        "supportForward"
+      ],
+      "properties": {
+        "supportForward": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "imRobotOpenDeliverModel": {
+      "type": "object",
+      "required": [
+        "spaceType"
+      ],
+      "properties": {
+        "spaceType": {
+          "const": "IM_ROBOT"
+        },
+        "robotCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extension": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "userIdType": {
+      "const": 1
+    }
+  },
+  "additionalProperties": false
+}

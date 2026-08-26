@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/feedback-form.json",
+  "title": "Decoded weekly feedback form",
+  "type": "object",
+  "required": [
+    "fields"
+  ],
+  "properties": {
+    "fields": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 11,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "hidden",
+              "defaultValue"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "submissionId",
+                  "customer",
+                  "week",
+                  "collector",
+                  "reportTime"
+                ]
+              },
+              "type": {
+                "const": "TEXT"
+              },
+              "hidden": {
+                "const": true
+              },
+              "defaultValue": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "type",
+              "readOnly",
+              "defaultValue"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^project_[1-9][0-9]*$"
+              },
+              "label": {
+                "const": "项目名"
+              },
+              "type": {
+                "const": "TEXT"
+              },
+              "readOnly": {
+                "const": true
+              },
+              "defaultValue": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "type",
+              "required",
+              "options"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^satisfaction_[1-9][0-9]*$"
+              },
+              "label": {
+                "const": "是否满意"
+              },
+              "type": {
+                "const": "CHECKBOX_GROUP"
+              },
+              "required": {
+                "const": true
+              },
+              "requiredMsg": {
+                "type": "string",
+                "minLength": 1
+              },
+              "options": {
+                "const": [
+                  {
+                    "value": "满意",
+                    "text": "满意"
+                  },
+                  {
+                    "value": "不满意",
+                    "text": "不满意"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^feedback_[1-9][0-9]*$"
+              },
+              "label": {
+                "const": "反馈信息"
+              },
+              "type": {
+                "const": "TEXT_AREA"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "defaultValue": {
+                "const": ""
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

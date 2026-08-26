@@ -1,0 +1,29 @@
+{
+  "cardTemplateId": "3ff383e6-adfa-4117-a10f-6691f6eec086.schema",
+  "outTrackId": "wf-1787690400000-a1b2",
+  "callbackType": "HTTP",
+  "callbackRouteKey": "customer_feedback_aitable_v1",
+  "openSpaceId": "dtv1.card//IM_ROBOT.323179",
+  "cardData": {
+    "cardParamMap": {
+      "title": "维信诺项目回访",
+      "icon": "https://img.alicdn.com/imgextra/i4/O1CN01IPbS5e1f6ok5Oa1EH_!!6000000003958-2-tps-96-96.png",
+      "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+      "summaryMarkdown": "- 本周新增需求 11 项，其中 2 项已完成\n- 当前 6 个工单处理中，2 个已关闭\n- 重点跟进文档/表格操作体验及多人协同问题",
+      "weeklySummary": "- 本周新增需求 11 项，其中 2 项已完成\n- 当前 6 个工单处理中，2 个已关闭\n- 重点跟进文档/表格操作体验及多人协同问题",
+      "feedbackGuide": "请按项目选择满意度，并填写具体反馈。",
+      "reportPeriod": "2026年3月31日—2026年4月10日",
+      "feedbackForm": "{\"fields\":[{\"name\":\"submissionId\",\"hidden\":true,\"defaultValue\":\"wf-1787690400000-a1b2\"},{\"name\":\"customer\",\"hidden\":true,\"defaultValue\":\"维信诺\"},{\"name\":\"week\",\"hidden\":true,\"defaultValue\":\"2026-W15\"},{\"name\":\"collector\",\"hidden\":true,\"defaultValue\":\"辰驷\"},{\"name\":\"reportTime\",\"hidden\":true,\"defaultValue\":\"2026-08-26 10:00:00\"},{\"name\":\"project_1\",\"type\":\"TEXT\",\"readOnly\":true,\"defaultValue\":\"智能助理项目\"},{\"name\":\"satisfaction_1\",\"type\":\"CHECKBOX_GROUP\",\"required\":true,\"options\":[{\"value\":\"满意\",\"text\":\"满意\"},{\"value\":\"不满意\",\"text\":\"不满意\"}]},{\"name\":\"feedback_1\",\"type\":\"TEXT_AREA\"},{\"name\":\"project_2\",\"type\":\"TEXT\",\"readOnly\":true,\"defaultValue\":\"数据看板项目\"},{\"name\":\"satisfaction_2\",\"type\":\"CHECKBOX_GROUP\",\"required\":true,\"options\":[{\"value\":\"满意\",\"text\":\"满意\"},{\"value\":\"不满意\",\"text\":\"不满意\"}]},{\"name\":\"feedback_2\",\"type\":\"TEXT_AREA\"}]}",
+      "satisfactionOptions": "[{\"label\":\"满意\",\"value\":\"满意\"},{\"label\":\"不满意\",\"value\":\"不满意\"}]",
+      "submitButtonText": "提交",
+      "formState": "normal"
+    }
+  },
+  "imRobotOpenSpaceModel": {
+    "supportForward": true
+  },
+  "imRobotOpenDeliverModel": {
+    "spaceType": "IM_ROBOT"
+  },
+  "userIdType": 1
+}

@@ -69,7 +69,7 @@ dws doc read --node "$REPORT_URL"
 
 - `outTrackId` 每次生成新值，推荐 `wf-<毫秒时间戳>-<4位随机串>`，总长度不超过 40 个字符。
 - `collector` 是本次任务发起人，不是应用机器人、Agent 或表单提交人。
-- 项目数量由 `projects` 的实际长度决定，构造器动态生成原生表单字段，不写死 2 行或其他固定数量。
+- 项目数量由 `projects` 的实际长度决定，构造器动态生成紧凑项目行，不写死 2 行或其他固定数量。
 - `iconUrl` 必须是可公网读取的 HTTPS 图片 URL。
 - 不允许业务对象出现未声明字段。
 
@@ -85,11 +85,11 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 构造器负责：
 
 1. 用 `weekly-card-input.schema.json` 校验业务对象。
-2. 按项目实际数量生成原生 `feedbackForm` 对象；每个项目拥有独立满意度、快捷原因和具体反馈字段。
-3. 只在 DWS 传输边界把 `feedbackForm` 序列化为紧凑 JSON String。
+2. 按项目实际数量生成 `projectRows` 数组；每个项目拥有独立 ID、满意度、快捷原因、具体反馈和选中状态。
+3. 只在 DWS 传输边界把 `projectRows` 序列化为紧凑 JSON String。
 4. 用内部 Schema 校验反序列化结果。
 5. 用外层 Schema 校验最终 DWS 请求。
-6. 检查跨字段编号、隐藏元数据、敏感字段和参数 key 的 UTF-8 字节上限。
+6. 检查项目 ID、选项归属、满意度状态、敏感字段和参数 key 的 UTF-8 字节上限。
 
 ## 卡片变量映射
 
@@ -109,13 +109,14 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 | `collector` | 发起本次卡片任务的用户展示名称 |
 | `reportTime` | 卡片生成时间 |
 | `submissionId` | 与本次 `outTrackId` 相同的提交唯一编号 |
-| `feedbackForm` | 动态原生表单对象序列化后的紧凑 JSON String |
+| `projectRows` | 动态紧凑项目行数组序列化后的 JSON String |
 | `submitButtonText` | 初始为 `提交` |
 | `formState` | 初始为 `normal` |
+| `formDisabled` | 初始为字符串 `false` |
 
-`feedbackForm.fields` 先包含 `submissionId`、`customer`、`week`、`collector`、`reportTime` 五个隐藏字段。随后每个项目按连续编号生成：隐藏项目名 `project_N`、必填满意度 `satisfaction_N`、快捷不满意原因 `reasons_N`、具体反馈 `feedback_N`。四组编号必须从 1 连续递增并完全一致。
+`projectRows` 的 ID 从 `p1` 连续递增。每行包含项目名、两项满意度选项、快捷不满意原因、已选原因序号和具体反馈。选择或填写时，HTTP 回调只更新当前用户的 `userPrivateData.projectRows`；底部提交按钮回传完整数组，回调再转换为 AI 表格所需的连续 `project_N`、`satisfaction_N`、`feedback_N` 字段。
 
-传输层每个 key 不超过 100 UTF-8 字节。钉钉官方原生表单示例会将完整表单对象作为一个 `cardParamMap` 字符串值发送，因此不要再使用旧技能中的 1024 字节自定义上限。构造器仍采用紧凑字段定义，并对反序列化后的完整结构执行 Schema 校验。
+传输层每个 key 不超过 100 UTF-8 字节。构造器对反序列化后的完整 `projectRows` 执行 Schema 校验，禁止用 JSON String 抹平内部结构来绕过校验。
 
 ## 产物及获取
 
@@ -142,12 +143,13 @@ DWS 返回的 `result.outTrackId` 是本次卡片实例的主要追踪标识。�
 
 ### 反馈数据
 
-卡片提交后，用 `outTrackId` 在 AI 表格中查询同一次提交产生的项目反馈行。反馈人来自提交回调的 `userId`，收集人来自卡片变量 `collector`。`reasons_N` 会与 `feedback_N` 合并写入“反馈”列，避免快捷原因丢失。
+卡片提交后，用 `outTrackId` 在 AI 表格中查询同一次提交产生的项目反馈行。反馈人来自提交回调的 `userId`，收集人来自卡片变量 `collector`。已选快捷原因会与具体反馈合并写入“反馈”列，避免信息丢失。
 
 ## 变更历史
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v6 | 恢复紧凑动态 `projectRows`，增加交互草稿回调与最终统一提交的分层协议 | 降低项目区域高度，并以服务端私有草稿保证各项目状态独立可靠 |
 | 2026-08-27 | v5 | 业务图标字段改为 `iconUrl`，传输层恢复动态 `feedbackForm` 并增加 `reasons_N` | 与已保存的原生 Form 模板变量保持一致，并保留快捷不满意原因 |
 | 2026-08-26 | v3 | 用动态 `projectRows` 取代固定编号表单字段，项目数不再限制为 2 | 让模板按实际项目数量循环渲染并保持结构化校验 |
 | 2026-08-26 | v4 | 增加共享布尔状态 `formDisabled` | 让动态满意度组件与输入框在任一用户提交成功后统一进入禁用态 |

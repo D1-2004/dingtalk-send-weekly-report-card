@@ -15,11 +15,11 @@ from validate_card_payload import load_json, schema_errors, validate_payload
 CARD_TEMPLATE_ID = "3ff383e6-adfa-4117-a10f-6691f6eec086.schema"
 CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
 SATISFACTION_OPTIONS = [
-    {"value": "满意", "text": "满意"},
-    {"value": "不满意", "text": "不满意"},
+    {"value": "满意", "text": "满意", "checked": False},
+    {"value": "不满意", "text": "不满意", "checked": False},
 ]
 REASON_OPTIONS = [
-    {"value": value, "text": value}
+    {"value": value, "text": {"zh_CN": value}}
     for value in (
         "响应不及时",
         "问题未解决",
@@ -47,58 +47,26 @@ def compact_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def build_feedback_form(data: dict[str, Any]) -> dict[str, Any]:
-    fields: list[dict[str, Any]] = [
+def build_project_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
         {
-            "name": name,
-            "hidden": True,
-            "defaultValue": value,
+            "id": f"p{index}",
+            "name": project["name"],
+            "satisfaction": "",
+            "satisfactionOptions": [
+                {"projectId": f"p{index}", **option}
+                for option in SATISFACTION_OPTIONS
+            ],
+            "reasonOptions": [dict(option) for option in REASON_OPTIONS],
+            "selectedReasonIndexes": [],
+            "feedback": "",
         }
-        for name, value in (
-            ("submissionId", data["outTrackId"]),
-            ("customer", data["customer"]),
-            ("week", data["week"]),
-            ("collector", data["collector"]),
-            ("reportTime", data["reportTime"]),
-        )
+        for index, project in enumerate(data["projects"], start=1)
     ]
-    for index, project in enumerate(data["projects"], start=1):
-        name = project["name"]
-        fields.extend(
-            [
-                {
-                    "name": f"project_{index}",
-                    "hidden": True,
-                    "defaultValue": name,
-                },
-                {
-                    "name": f"satisfaction_{index}",
-                    "label": name,
-                    "type": "CHECKBOX_GROUP",
-                    "required": True,
-                    "requiredMsg": f"请选择{name}的满意度",
-                    "options": SATISFACTION_OPTIONS,
-                },
-                {
-                    "name": f"reasons_{index}",
-                    "label": "不满意原因（可多选）",
-                    "type": "MULTI_SELECT",
-                    "placeholder": "快速选择不满意原因",
-                    "options": REASON_OPTIONS,
-                },
-                {
-                    "name": f"feedback_{index}",
-                    "label": "具体反馈",
-                    "type": "TEXT_AREA",
-                    "placeholder": f"请输入对{name}的具体反馈（可选）",
-                },
-            ]
-        )
-    return {"fields": fields}
 
 
 def build_payload(data: dict[str, Any]) -> dict[str, Any]:
-    feedback_form = build_feedback_form(data)
+    project_rows = build_project_rows(data)
     return {
         "cardTemplateId": CARD_TEMPLATE_ID,
         "outTrackId": data["outTrackId"],
@@ -119,9 +87,10 @@ def build_payload(data: dict[str, Any]) -> dict[str, Any]:
                 "collector": data["collector"],
                 "reportTime": data["reportTime"],
                 "submissionId": data["outTrackId"],
-                "feedbackForm": compact_json(feedback_form),
+                "projectRows": compact_json(project_rows),
                 "submitButtonText": "提交",
                 "formState": "normal",
+                "formDisabled": "false",
             }
         },
         "imRobotOpenSpaceModel": {"supportForward": True},

@@ -55,9 +55,10 @@
             "collector",
             "reportTime",
             "submissionId",
-            "feedbackForm",
+            "projectRows",
             "submitButtonText",
-            "formState"
+            "formState",
+            "formDisabled"
           ],
           "properties": {
             "title": {
@@ -110,16 +111,19 @@
               "maxLength": 64,
               "pattern": "^[A-Za-z0-9._:-]+$"
             },
-            "feedbackForm": {
+            "projectRows": {
               "type": "string",
               "minLength": 2,
-              "$comment": "JSON-encoded object validated separately with feedback-form.schema.json"
+              "$comment": "JSON-encoded array validated separately with project-rows.schema.json"
             },
             "submitButtonText": {
               "const": "提交"
             },
             "formState": {
               "const": "normal"
+            },
+            "formDisabled": {
+              "const": "false"
             }
           },
           "additionalProperties": false

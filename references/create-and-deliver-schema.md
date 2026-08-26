@@ -31,7 +31,7 @@ POST /v1.0/card/instances/createAndDeliver
 | --- | --- | --- |
 | 业务输入 | `../assets/weekly-card-input.schema.json` | 周报、接收人和项目组成的未序列化对象 |
 | DWS 传输 | `../assets/create-and-deliver.schema.json` | `createAndDeliver` 最终请求 |
-| 表单变量 | `../assets/feedback-form.schema.json` | `feedbackForm` 反序列化后的原生表单对象 |
+| 项目行变量 | `../assets/project-rows.schema.json` | `projectRows` 反序列化后的动态项目数组 |
 
 所有 Schema 使用 JSON Schema Draft 2020-12，由 `jsonschema>=4.18,<5` 执行。依赖版本见 `../scripts/requirements.txt`。此外，Python 校验器只负责 JSON Schema 难以表达的跨字段关系、递归敏感字段扫描和参数 key 的 UTF-8 字节长度。
 
@@ -60,7 +60,9 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 禁止省略 `--client-id` 和 `--client-secret` 后依赖 DWS 的隐式环境变量注入。禁止把凭证放入 `card-request.json`。
 
-禁止直接手写 `feedbackForm` 字符串。真实发送不得使用校验器的 `--skip-env-check`。
+禁止直接手写 `projectRows` 字符串。真实发送不得使用校验器的 `--skip-env-check`。
+
+循环交互组件的满意度、原因和输入事件使用同一个 HTTP 路由，但草稿事件只更新 `userPrivateData.projectRows`，不得调用 AI 表格。只有 `submit_weekly_feedback` 最终事件写表；写入成功后回调将共享 `cardData.formState`、`formDisabled`、`submitButtonText` 更新为 `disabled`、`true`、`已提交`。
 
 ## 响应判定
 
@@ -93,6 +95,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v7 | 传输变量恢复为结构化 `projectRows`；增加“私有草稿更新”和“最终写表提交”两类回调语义 | 紧凑循环布局需要逐项服务端同步才能保证项目状态独立，同时保持 AI 表格只写一次 |
 | 2026-08-27 | v6 | 传输协议改为动态原生 `feedbackForm`，移除错误的单值 1024 字节自限，并把共享提交状态收口到回调 `cardData` | 支持 3–5 个及更多项目的独立表单字段，同时确保一次提交后整张卡片不可再次提交 |
 | 2026-08-26 | v4 | 传输协议由固定 `feedbackForm` 改为动态 `projectRows`，增加项目行内部 Schema | 支持任意实际项目数并防止字符串化数组绕过结构校验 |
 | 2026-08-26 | v5 | 增加 `formDisabled` 卡片参数 | 提交成功后由共享 cardData 控制所有项目行交互组件禁用 |

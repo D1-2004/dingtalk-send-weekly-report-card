@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/project-rows.json",
+  "title": "Decoded compact weekly feedback project rows",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "name",
+      "satisfaction",
+      "satisfactionOptions",
+      "reasonOptions",
+      "selectedReasonIndexes",
+      "feedback"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^p[1-9][0-9]*$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "satisfaction": {
+        "enum": ["", "满意", "不满意"]
+      },
+      "satisfactionOptions": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "object",
+            "required": ["projectId", "value", "text", "checked"],
+            "properties": {
+              "projectId": {"type": "string", "pattern": "^p[1-9][0-9]*$"},
+              "value": {"const": "满意"},
+              "text": {"const": "满意"},
+              "checked": {"type": "boolean"}
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["projectId", "value", "text", "checked"],
+            "properties": {
+              "projectId": {"type": "string", "pattern": "^p[1-9][0-9]*$"},
+              "value": {"const": "不满意"},
+              "text": {"const": "不满意"},
+              "checked": {"type": "boolean"}
+            },
+            "additionalProperties": false
+          }
+        ],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "reasonOptions": {
+        "const": [
+          {"value": "响应不及时", "text": {"zh_CN": "响应不及时"}},
+          {"value": "问题未解决", "text": {"zh_CN": "问题未解决"}},
+          {"value": "交付质量不佳", "text": {"zh_CN": "交付质量不佳"}},
+          {"value": "沟通体验不佳", "text": {"zh_CN": "沟通体验不佳"}},
+          {"value": "需求理解偏差", "text": {"zh_CN": "需求理解偏差"}},
+          {"value": "其他", "text": {"zh_CN": "其他"}}
+        ]
+      },
+      "selectedReasonIndexes": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      },
+      "feedback": {
+        "type": "string",
+        "maxLength": 500
+      }
+    },
+    "additionalProperties": false
+  }
+}

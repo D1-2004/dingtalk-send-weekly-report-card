@@ -20,13 +20,6 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 MAX_PARAM_KEY_BYTES = 100
-REQUIRED_HIDDEN_FIELDS = {
-    "submissionId",
-    "customer",
-    "week",
-    "collector",
-    "reportTime",
-}
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",
@@ -154,50 +147,12 @@ def find_forbidden_keys(value: Any, path: str = "$") -> list[str]:
     return findings
 
 
-def field_indexes(fields: list[dict[str, Any]], prefix: str) -> set[int]:
-    indexes: set[int] = set()
-    for field in fields:
-        match = re.fullmatch(rf"{re.escape(prefix)}_(\d+)", str(field.get("name", "")))
-        if match:
-            indexes.add(int(match.group(1)))
-    return indexes
-
-
 def validate_cross_fields(
-    payload: dict[str, Any], card_params: dict[str, Any], decoded_form: Any,
+    payload: dict[str, Any], card_params: dict[str, Any], decoded_rows: Any,
     errors: list[str]
 ) -> int:
-    if not isinstance(decoded_form, dict) or not isinstance(decoded_form.get("fields"), list):
+    if not isinstance(decoded_rows, list):
         return 0
-    fields = [field for field in decoded_form["fields"] if isinstance(field, dict)]
-    names = [field.get("name") for field in fields]
-    if len(names) != len(set(names)):
-        errors.append("feedbackForm field names must be unique")
-
-    indexed = {
-        field["name"]: field
-        for field in fields
-        if isinstance(field.get("name"), str)
-    }
-    hidden_names = {
-        name
-        for name, field in indexed.items()
-        if field.get("hidden") is True and name in REQUIRED_HIDDEN_FIELDS
-    }
-    if hidden_names != REQUIRED_HIDDEN_FIELDS:
-        errors.append("feedbackForm hidden fields must match the required metadata set")
-
-    expected_metadata = {
-        "submissionId": payload.get("outTrackId"),
-        "customer": card_params.get("customer"),
-        "week": card_params.get("week"),
-        "collector": card_params.get("collector"),
-        "reportTime": card_params.get("reportTime"),
-    }
-    for name, expected in expected_metadata.items():
-        if indexed.get(name, {}).get("defaultValue") != expected:
-            errors.append(f"feedbackForm {name} must match cardParamMap")
-
     if card_params.get("submissionId") != payload.get("outTrackId"):
         errors.append("cardParamMap.submissionId must equal outTrackId")
 
@@ -209,26 +164,32 @@ def validate_cross_fields(
     except ValueError:
         errors.append("cardParamMap.reportTime must be a valid YYYY-MM-DD HH:mm:ss")
 
-    project_indexes = field_indexes(fields, "project")
-    satisfaction_indexes = field_indexes(fields, "satisfaction")
-    reasons_indexes = field_indexes(fields, "reasons")
-    feedback_indexes = field_indexes(fields, "feedback")
-    if not (
-        project_indexes
-        == satisfaction_indexes
-        == reasons_indexes
-        == feedback_indexes
-        and project_indexes
-    ):
-        errors.append("project/satisfaction/reasons/feedback indexes must match")
-        return len(project_indexes)
-    if project_indexes != set(range(1, len(project_indexes) + 1)):
-        errors.append("project indexes must be contiguous and start at 1")
-    for index in project_indexes:
-        project_name = indexed[f"project_{index}"].get("defaultValue")
-        if indexed[f"satisfaction_{index}"].get("label") != project_name:
-            errors.append(f"satisfaction_{index} label must equal project name")
-    return len(project_indexes)
+    rows = [row for row in decoded_rows if isinstance(row, dict)]
+    ids = [row.get("id") for row in rows]
+    expected_ids = [f"p{index}" for index in range(1, len(rows) + 1)]
+    if ids != expected_ids:
+        errors.append("projectRows ids must be contiguous and start at p1")
+    names = [row.get("name") for row in rows]
+    if len(names) != len(set(names)):
+        errors.append("projectRows project names must be unique")
+    for index, row in enumerate(rows, start=1):
+        if any(
+            option.get("projectId") != row.get("id")
+            for option in row.get("satisfactionOptions", [])
+            if isinstance(option, dict)
+        ):
+            errors.append(f"projectRows p{index} satisfaction option projectId mismatch")
+        checked = [
+            option.get("value")
+            for option in row.get("satisfactionOptions", [])
+            if isinstance(option, dict) and option.get("checked") is True
+        ]
+        satisfaction = row.get("satisfaction")
+        if satisfaction == "" and checked:
+            errors.append(f"projectRows p{index} has checked option without satisfaction")
+        if satisfaction and checked != [satisfaction]:
+            errors.append(f"projectRows p{index} satisfaction state is inconsistent")
+    return len(rows)
 
 
 def validate_card_param_sizes(card_params: Any, errors: list[str]) -> None:
@@ -266,24 +227,24 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
     if not isinstance(card_params, dict):
         return errors, project_count
 
-    decoded_form = parse_json_string(
-        card_params.get("feedbackForm"), "cardParamMap.feedbackForm", errors
+    decoded_rows = parse_json_string(
+        card_params.get("projectRows"), "cardParamMap.projectRows", errors
     )
 
-    if decoded_form is not None:
-        for path in find_forbidden_keys(decoded_form, "$.feedbackForm"):
+    if decoded_rows is not None:
+        for path in find_forbidden_keys(decoded_rows, "$.projectRows"):
             errors.append(
                 f"secret-like field is forbidden in decoded payload: {path}"
             )
 
-    if decoded_form is not None:
+    if decoded_rows is not None:
         errors.extend(
             schema_errors(
-                decoded_form, "feedback-form.schema.json", "decoded feedbackForm"
+                decoded_rows, "project-rows.schema.json", "decoded projectRows"
             )
         )
         project_count = validate_cross_fields(
-            payload, card_params, decoded_form, errors
+            payload, card_params, decoded_rows, errors
         )
     return errors, project_count
 

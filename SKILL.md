@@ -15,7 +15,7 @@ description: 当用户向 Agent 提供钉钉/阿里云文档周报链接，并�
 - `references/create-and-deliver-schema.md`：DWS API 参数和响应判定。
 - `assets/weekly-card-input.schema.json`：Agent 生成的未序列化业务对象约束。
 - `assets/create-and-deliver.schema.json`：DWS 外层传输请求约束。
-- `assets/feedback-form.schema.json`：字符串化 `feedbackForm` 反序列化后的结构约束。
+- `assets/project-rows.schema.json`：字符串化 `projectRows` 反序列化后的动态项目结构约束。
 
 使用 `assets/weekly-card-input.example.json` 作为输入样例，使用 `assets/card-request.example.json` 核对构造结果。不要直接发送样例中的接收人或 `outTrackId`。
 
@@ -47,7 +47,7 @@ dws doc read --node "$REPORT_URL"
 
 ### 3. 生成卡片请求
 
-不要让模型直接拼接字符串化的 `feedbackForm`。先生成未序列化的业务对象，再调用确定性构造器：
+不要让模型直接拼接字符串化的 `projectRows`。先生成未序列化的业务对象，再调用确定性构造器：
 
 ```bash
 python3 scripts/build_card_payload.py weekly-card-input.json \
@@ -61,13 +61,13 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 - `callbackType` 使用 `HTTP`。
 - `callbackRouteKey` 默认使用 `customer_feedback_aitable_v1`。
 - `cardData.cardParamMap` 的所有值必须是字符串。
-- `projects` 在业务层是对象数组，只在 DWS 传输边界转换为一个原生表单对象。
-- `feedbackForm` 按实际项目数量生成；每个项目包含独立的 `project_N`、`satisfaction_N`、`reasons_N`、`feedback_N` 字段。
-- `satisfaction_N` 是必填的满意/不满意二选一；`reasons_N` 提供不满意原因快捷多选；`feedback_N` 接收具体反馈。
-- `customer`、`week`、`collector`、`reportTime`、`submissionId` 同时作为独立卡片变量和表单隐藏值传递。
-- 初始 `formState` 使用 `normal`，`submitButtonText` 使用 `提交`。提交成功后 HTTP 回调更新共享 `cardData` 为 `disabled`、`已提交`，使同一卡片不能再次提交。
+- `projects` 在业务层是对象数组，只在 DWS 传输边界转换为动态 `projectRows`。
+- 每个项目行包含独立 `id`、满意度、快捷不满意原因、具体反馈及当前选中状态；项目数不写死。
+- 项目行的选择/填写事件只调用卡片回调更新当前用户的 `userPrivateData.projectRows`，不写 AI 表格；底部按钮一次性提交完整 `projectRows`。
+- `customer`、`week`、`collector`、`reportTime`、`submissionId` 作为独立卡片变量传递，并在最终提交时一并回传。
+- 初始 `formState` 使用 `normal`、`formDisabled` 使用字符串 `false`、`submitButtonText` 使用 `提交`。最终提交成功后 HTTP 回调更新共享 `cardData` 为 `disabled`、`true`、`已提交`，使同一卡片不能再次提交。
 - `imRobotOpenSpaceModel.supportForward` 使用 `true`。
-- `cardParamMap` 每个 key 不超过 100 UTF-8 字节；不要对原生 `feedbackForm` 施加 1024 字节的自定义上限。
+- `cardParamMap` 每个 key 不超过 100 UTF-8 字节；`projectRows` 必须先按内部 Schema 校验，再序列化为 JSON String。
 
 不要沿用旧卡片的 `outTrackId`。卡片内容或接收人发生变化时也必须生成新值。
 
@@ -90,7 +90,7 @@ python3 scripts/validate_card_payload.py card-request.json
 
 校验器默认同时检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 是否存在，但不会输出其值。任一变量不存在或为空时必须报错并终止，禁止继续调用 DWS API。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
 
-校验器会重新解析 `feedbackForm` 并执行内部 Schema，检查四类项目字段的编号是否一一对应、隐藏元数据是否与外层卡片数据一致，并递归扫描敏感字段。错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
+校验器会重新解析 `projectRows` 并执行内部 Schema，检查项目 ID 连续、项目名唯一、选项归属和满意度状态一致，并递归扫描敏感字段。错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
 
 ### 5. 显式传参调用 DWS API
 
@@ -156,6 +156,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v7 | 从原生 `feedbackForm` 切回紧凑循环布局；交互项按项目回调更新用户私有草稿，最终按钮统一写表并更新共享禁用态 | 缩短每个项目的展示高度，同时避免旧循环版满意度串值和动态本地对象无法可靠汇总的问题 |
 | 2026-08-27 | v6 | 改用动态原生 `feedbackForm`，图标变量统一为 `iconUrl`，增加快捷不满意原因并改为共享提交状态 | 修复循环交互状态串行、选项文案缺失和提交后仅个人禁用的问题，并与已保存模板协议对齐 |
 | 2026-08-26 | v5 | 增加共享 `formDisabled` 状态，并明确动态项目数组不设固定数量上限 | 提交成功后统一禁用所有动态行，且按周报实际项目数渲染 |
 | 2026-08-26 | v4 | 项目反馈由固定两组表单字段改为动态 `projectRows` 数组，明确 `icon` 必填 | 支持按周报实际项目数量循环渲染，避免 3 项、5 项场景被截断或写死 |

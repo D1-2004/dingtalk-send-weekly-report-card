@@ -19,8 +19,8 @@ def load_example() -> dict:
     return json.loads(EXAMPLE.read_text(encoding="utf-8"))
 
 
-def decoded_feedback_form(payload: dict) -> dict:
-    return json.loads(payload["cardData"]["cardParamMap"]["feedbackForm"])
+def decoded_project_rows(payload: dict) -> list[dict]:
+    return json.loads(payload["cardData"]["cardParamMap"]["projectRows"])
 
 
 def load_new_protocol_example() -> dict:
@@ -80,12 +80,12 @@ class CardPayloadValidationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn('"valid": true', result.stdout)
 
-    def test_rejects_secret_like_key_inside_feedback_form(self) -> None:
+    def test_rejects_secret_like_key_inside_project_rows(self) -> None:
         payload = load_new_protocol_example()
-        form = decoded_feedback_form(payload)
-        form["fields"][0]["clientSecret"] = "dummy-test-value"
-        payload["cardData"]["cardParamMap"]["feedbackForm"] = json.dumps(
-            form, ensure_ascii=False, separators=(",", ":")
+        rows = decoded_project_rows(payload)
+        rows[0]["clientSecret"] = "dummy-test-value"
+        payload["cardData"]["cardParamMap"]["projectRows"] = json.dumps(
+            rows, ensure_ascii=False, separators=(",", ":")
         )
 
         result = run_validator(payload)
@@ -103,18 +103,18 @@ class CardPayloadValidationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("unexpected", result.stdout)
 
-    def test_rejects_unknown_feedback_form_field_property(self) -> None:
+    def test_rejects_unknown_project_row_property(self) -> None:
         payload = load_new_protocol_example()
-        form = decoded_feedback_form(payload)
-        form["fields"][0]["unexpected"] = "value"
-        payload["cardData"]["cardParamMap"]["feedbackForm"] = json.dumps(
-            form, ensure_ascii=False, separators=(",", ":")
+        rows = decoded_project_rows(payload)
+        rows[0]["unexpected"] = "value"
+        payload["cardData"]["cardParamMap"]["projectRows"] = json.dumps(
+            rows, ensure_ascii=False, separators=(",", ":")
         )
 
         result = run_validator(payload)
 
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("decoded feedbackForm", result.stdout)
+        self.assertIn("decoded projectRows", result.stdout)
 
 
 class CardPayloadBuilderTests(unittest.TestCase):
@@ -191,38 +191,34 @@ class CardPayloadBuilderTests(unittest.TestCase):
         card_params = payload["cardData"]["cardParamMap"]
         self.assertEqual(card_params["iconUrl"], semantic_input["iconUrl"])
         self.assertNotIn("icon", card_params)
-        self.assertNotIn("projectRows", card_params)
-        self.assertNotIn("satisfactionOptions", card_params)
-        self.assertNotIn("formDisabled", card_params)
-        form = decoded_feedback_form(payload)
-        fields = form["fields"]
-        self.assertEqual(len(fields), 25)
+        self.assertNotIn("feedbackForm", card_params)
+        self.assertEqual(card_params["formDisabled"], "false")
+        rows = decoded_project_rows(payload)
+        self.assertEqual(len(rows), 5)
         self.assertEqual(
-            fields[5],
+            rows[0],
             {
-                "name": "project_1",
-                "hidden": True,
-                "defaultValue": "智能助理项目",
+                "id": "p1",
+                "name": "智能助理项目",
+                "satisfaction": "",
+                "satisfactionOptions": [
+                    {"projectId": "p1", "value": "满意", "text": "满意", "checked": False},
+                    {"projectId": "p1", "value": "不满意", "text": "不满意", "checked": False},
+                ],
+                "reasonOptions": [
+                    {"value": "响应不及时", "text": {"zh_CN": "响应不及时"}},
+                    {"value": "问题未解决", "text": {"zh_CN": "问题未解决"}},
+                    {"value": "交付质量不佳", "text": {"zh_CN": "交付质量不佳"}},
+                    {"value": "沟通体验不佳", "text": {"zh_CN": "沟通体验不佳"}},
+                    {"value": "需求理解偏差", "text": {"zh_CN": "需求理解偏差"}},
+                    {"value": "其他", "text": {"zh_CN": "其他"}},
+                ],
+                "selectedReasonIndexes": [],
+                "feedback": "",
             },
         )
-        self.assertEqual(fields[6]["name"], "satisfaction_1")
-        self.assertEqual(fields[6]["label"], "智能助理项目")
-        self.assertEqual(fields[6]["type"], "CHECKBOX_GROUP")
-        self.assertEqual(
-            fields[6]["options"],
-            [
-                {"value": "满意", "text": "满意"},
-                {"value": "不满意", "text": "不满意"},
-            ],
-        )
-        self.assertEqual(fields[7]["name"], "reasons_1")
-        self.assertEqual(fields[7]["type"], "MULTI_SELECT")
-        self.assertEqual(fields[8]["name"], "feedback_1")
-        self.assertEqual(fields[-4]["defaultValue"], "工单自动化")
-        self.assertEqual(fields[-3]["name"], "satisfaction_5")
-        self.assertEqual(fields[-2]["name"], "reasons_5")
-        self.assertEqual(fields[-1]["name"], "feedback_5")
-        self.assertGreater(len(card_params["feedbackForm"].encode("utf-8")), 1024)
+        self.assertEqual(rows[-1]["id"], "p5")
+        self.assertEqual(rows[-1]["name"], "工单自动化")
         validation = run_validator(payload)
         self.assertEqual(validation.returncode, 0, validation.stdout)
 

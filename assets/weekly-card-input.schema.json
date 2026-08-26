@@ -6,7 +6,7 @@
   "required": [
     "outTrackId",
     "title",
-    "icon",
+    "iconUrl",
     "reportUrl",
     "summaryMarkdown",
     "feedbackGuide",
@@ -30,7 +30,7 @@
       "minLength": 1,
       "maxLength": 80
     },
-    "icon": {
+    "iconUrl": {
       "type": "string",
       "pattern": "^https://"
     },
@@ -80,7 +80,6 @@
     "projects": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 2,
       "uniqueItems": true,
       "items": {
         "type": "object",

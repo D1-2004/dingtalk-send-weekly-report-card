@@ -15,12 +15,19 @@ from validate_card_payload import load_json, schema_errors, validate_payload
 CARD_TEMPLATE_ID = "3ff383e6-adfa-4117-a10f-6691f6eec086.schema"
 CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
 SATISFACTION_OPTIONS = [
-    {"label": "满意", "value": "满意"},
-    {"label": "不满意", "value": "不满意"},
-]
-FORM_SATISFACTION_OPTIONS = [
     {"value": "满意", "text": "满意"},
     {"value": "不满意", "text": "不满意"},
+]
+REASON_OPTIONS = [
+    {"value": value, "text": value}
+    for value in (
+        "响应不及时",
+        "问题未解决",
+        "交付质量不佳",
+        "沟通体验不佳",
+        "需求理解偏差",
+        "其他",
+    )
 ]
 
 
@@ -43,49 +50,47 @@ def compact_json(value: Any) -> str:
 def build_feedback_form(data: dict[str, Any]) -> dict[str, Any]:
     fields: list[dict[str, Any]] = [
         {
-            "name": "submissionId",
+            "name": name,
             "hidden": True,
-            "defaultValue": data["outTrackId"],
-        },
-        {
-            "name": "customer",
-            "hidden": True,
-            "defaultValue": data["customer"],
-        },
-        {
-            "name": "week",
-            "hidden": True,
-            "defaultValue": data["week"],
-        },
-        {
-            "name": "collector",
-            "hidden": True,
-            "defaultValue": data["collector"],
-        },
-        {
-            "name": "reportTime",
-            "hidden": True,
-            "defaultValue": data["reportTime"],
-        },
+            "defaultValue": value,
+        }
+        for name, value in (
+            ("submissionId", data["outTrackId"]),
+            ("customer", data["customer"]),
+            ("week", data["week"]),
+            ("collector", data["collector"]),
+            ("reportTime", data["reportTime"]),
+        )
     ]
     for index, project in enumerate(data["projects"], start=1):
+        name = project["name"]
         fields.extend(
             [
                 {
                     "name": f"project_{index}",
-                    "type": "TEXT",
-                    "readOnly": True,
-                    "defaultValue": project["name"],
+                    "hidden": True,
+                    "defaultValue": name,
                 },
                 {
                     "name": f"satisfaction_{index}",
+                    "label": name,
                     "type": "CHECKBOX_GROUP",
                     "required": True,
-                    "options": FORM_SATISFACTION_OPTIONS,
+                    "requiredMsg": f"请选择{name}的满意度",
+                    "options": SATISFACTION_OPTIONS,
+                },
+                {
+                    "name": f"reasons_{index}",
+                    "label": "不满意原因（可多选）",
+                    "type": "MULTI_SELECT",
+                    "placeholder": "快速选择不满意原因",
+                    "options": REASON_OPTIONS,
                 },
                 {
                     "name": f"feedback_{index}",
+                    "label": "具体反馈",
                     "type": "TEXT_AREA",
+                    "placeholder": f"请输入对{name}的具体反馈（可选）",
                 },
             ]
         )
@@ -103,14 +108,18 @@ def build_payload(data: dict[str, Any]) -> dict[str, Any]:
         "cardData": {
             "cardParamMap": {
                 "title": data["title"],
-                "icon": data["icon"],
+                "iconUrl": data["iconUrl"],
                 "reportUrl": data["reportUrl"],
                 "summaryMarkdown": data["summaryMarkdown"],
                 "weeklySummary": data["summaryMarkdown"],
                 "feedbackGuide": data["feedbackGuide"],
                 "reportPeriod": data["reportPeriod"],
+                "customer": data["customer"],
+                "week": data["week"],
+                "collector": data["collector"],
+                "reportTime": data["reportTime"],
+                "submissionId": data["outTrackId"],
                 "feedbackForm": compact_json(feedback_form),
-                "satisfactionOptions": compact_json(SATISFACTION_OPTIONS),
                 "submitButtonText": "提交",
                 "formState": "normal",
             }

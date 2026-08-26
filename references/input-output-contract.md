@@ -48,7 +48,7 @@ dws doc read --node "$REPORT_URL"
 {
   "outTrackId": "wf-1787690400000-a1b2",
   "title": "维信诺项目回访",
-  "icon": "https://img.alicdn.com/example.png",
+  "iconUrl": "https://img.alicdn.com/example.png",
   "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
   "summaryMarkdown": "- 本周新增需求 11 项\n- 当前 6 个工单处理中",
   "feedbackGuide": "请按项目选择满意度，并填写具体反馈。",
@@ -69,7 +69,8 @@ dws doc read --node "$REPORT_URL"
 
 - `outTrackId` 每次生成新值，推荐 `wf-<毫秒时间戳>-<4位随机串>`，总长度不超过 40 个字符。
 - `collector` 是本次任务发起人，不是应用机器人、Agent 或表单提交人。
-- 当前卡片模板一次支持 1 至 2 个项目。超过 2 个时停止并报告模板需要扩展。
+- 项目数量由 `projects` 的实际长度决定，构造器动态生成原生表单字段，不写死 2 行或其他固定数量。
+- `iconUrl` 必须是可公网读取的 HTTPS 图片 URL。
 - 不允许业务对象出现未声明字段。
 
 ## 确定性构造
@@ -84,11 +85,11 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 构造器负责：
 
 1. 用 `weekly-card-input.schema.json` 校验业务对象。
-2. 生成 `feedbackForm` 对象和满意度选项数组。
-3. 只在 DWS 传输边界把对象和数组序列化为紧凑 JSON String。
+2. 按项目实际数量生成原生 `feedbackForm` 对象；每个项目拥有独立满意度、快捷原因和具体反馈字段。
+3. 只在 DWS 传输边界把 `feedbackForm` 序列化为紧凑 JSON String。
 4. 用内部 Schema 校验反序列化结果。
 5. 用外层 Schema 校验最终 DWS 请求。
-6. 检查跨字段关系、敏感字段和 UTF-8 字节上限。
+6. 检查跨字段编号、隐藏元数据、敏感字段和参数 key 的 UTF-8 字节上限。
 
 ## 卡片变量映射
 
@@ -97,20 +98,24 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 | 卡片变量 | 取值 |
 | --- | --- |
 | `title` | 客户或项目回访标题 |
-| `icon` | 可公网读取的 HTTPS 图片 URL |
+| `iconUrl` | 可公网读取的 HTTPS 图片 URL |
 | `reportUrl` | 原始周报链接 |
 | `summaryMarkdown` | 周报事实摘要，Markdown 字符串 |
 | `weeklySummary` | 与 `summaryMarkdown` 一致，用于兼容当前模板变量 |
 | `feedbackGuide` | 简短的反馈引导语 |
 | `reportPeriod` | 周报周期 |
-| `feedbackForm` | `{"fields":[...]}` 对象序列化后的紧凑 JSON String |
-| `satisfactionOptions` | 满意度数组序列化后的紧凑 JSON String |
+| `customer` | 客户名称 |
+| `week` | ISO 周次，例如 `2026-W15` |
+| `collector` | 发起本次卡片任务的用户展示名称 |
+| `reportTime` | 卡片生成时间 |
+| `submissionId` | 与本次 `outTrackId` 相同的提交唯一编号 |
+| `feedbackForm` | 动态原生表单对象序列化后的紧凑 JSON String |
 | `submitButtonText` | 初始为 `提交` |
 | `formState` | 初始为 `normal` |
 
-`feedbackForm.fields` 包含五个隐藏元数据字段：`submissionId`、`customer`、`week`、`collector`、`reportTime`。每个项目再生成连续编号的 `project_N`、`satisfaction_N`、`feedback_N`。
+`feedbackForm.fields` 先包含 `submissionId`、`customer`、`week`、`collector`、`reportTime` 五个隐藏字段。随后每个项目按连续编号生成：隐藏项目名 `project_N`、必填满意度 `satisfaction_N`、快捷不满意原因 `reasons_N`、具体反馈 `feedback_N`。四组编号必须从 1 连续递增并完全一致。
 
-传输层每个 key 不超过 100 UTF-8 字节，每个 value 不超过 1024 UTF-8 字节。构造器输出的表单采用紧凑字段定义；不要自行添加重复标签、提示语或其他冗余数据。
+传输层每个 key 不超过 100 UTF-8 字节。钉钉官方原生表单示例会将完整表单对象作为一个 `cardParamMap` 字符串值发送，因此不要再使用旧技能中的 1024 字节自定义上限。构造器仍采用紧凑字段定义，并对反序列化后的完整结构执行 Schema 校验。
 
 ## 产物及获取
 
@@ -137,11 +142,14 @@ DWS 返回的 `result.outTrackId` 是本次卡片实例的主要追踪标识。�
 
 ### 反馈数据
 
-卡片提交后，用 `submissionId`（即 `outTrackId`）在 AI 表格中查询同一次提交产生的项目反馈行。反馈人来自提交回调的 `userId`，收集人来自卡片隐藏字段 `collector`。
+卡片提交后，用 `outTrackId` 在 AI 表格中查询同一次提交产生的项目反馈行。反馈人来自提交回调的 `userId`，收集人来自卡片变量 `collector`。`reasons_N` 会与 `feedback_N` 合并写入“反馈”列，避免快捷原因丢失。
 
 ## 变更历史
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v5 | 业务图标字段改为 `iconUrl`，传输层恢复动态 `feedbackForm` 并增加 `reasons_N` | 与已保存的原生 Form 模板变量保持一致，并保留快捷不满意原因 |
+| 2026-08-26 | v3 | 用动态 `projectRows` 取代固定编号表单字段，项目数不再限制为 2 | 让模板按实际项目数量循环渲染并保持结构化校验 |
+| 2026-08-26 | v4 | 增加共享布尔状态 `formDisabled` | 让动态满意度组件与输入框在任一用户提交成功后统一进入禁用态 |
 | 2026-08-26 | v2 | 增加未序列化业务对象、确定性构造器、内部 Schema 和 1KB 限制 | 防止 JSON String 抹平内部结构并绕过发送前校验 |
 | 2026-08-26 | v1 | 建立周报提取、卡片变量和反馈字段映射 | 统一 Agent 从周报到卡片请求的输入输出 |

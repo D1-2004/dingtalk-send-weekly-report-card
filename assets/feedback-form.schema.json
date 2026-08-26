@@ -9,8 +9,7 @@
   "properties": {
     "fields": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 11,
+      "minItems": 9,
       "items": {
         "oneOf": [
           {
@@ -30,9 +29,6 @@
                   "reportTime"
                 ]
               },
-              "type": {
-                "const": "TEXT"
-              },
               "hidden": {
                 "const": true
               },
@@ -47,8 +43,7 @@
             "type": "object",
             "required": [
               "name",
-              "type",
-              "readOnly",
+              "hidden",
               "defaultValue"
             ],
             "properties": {
@@ -56,13 +51,7 @@
                 "type": "string",
                 "pattern": "^project_[1-9][0-9]*$"
               },
-              "label": {
-                "const": "项目名"
-              },
-              "type": {
-                "const": "TEXT"
-              },
-              "readOnly": {
+              "hidden": {
                 "const": true
               },
               "defaultValue": {
@@ -77,6 +66,7 @@
             "type": "object",
             "required": [
               "name",
+              "label",
               "type",
               "required",
               "options"
@@ -87,7 +77,9 @@
                 "pattern": "^satisfaction_[1-9][0-9]*$"
               },
               "label": {
-                "const": "是否满意"
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50
               },
               "type": {
                 "const": "CHECKBOX_GROUP"
@@ -118,6 +110,43 @@
             "type": "object",
             "required": [
               "name",
+              "label",
+              "type",
+              "options"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^reasons_[1-9][0-9]*$"
+              },
+              "label": {
+                "const": "不满意原因（可多选）"
+              },
+              "type": {
+                "const": "MULTI_SELECT"
+              },
+              "placeholder": {
+                "type": "string",
+                "minLength": 1
+              },
+              "options": {
+                "const": [
+                  {"value": "响应不及时", "text": "响应不及时"},
+                  {"value": "问题未解决", "text": "问题未解决"},
+                  {"value": "交付质量不佳", "text": "交付质量不佳"},
+                  {"value": "沟通体验不佳", "text": "沟通体验不佳"},
+                  {"value": "需求理解偏差", "text": "需求理解偏差"},
+                  {"value": "其他", "text": "其他"}
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "label",
               "type"
             ],
             "properties": {
@@ -126,7 +155,7 @@
                 "pattern": "^feedback_[1-9][0-9]*$"
               },
               "label": {
-                "const": "反馈信息"
+                "const": "具体反馈"
               },
               "type": {
                 "const": "TEXT_AREA"

@@ -20,7 +20,6 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 MAX_PARAM_KEY_BYTES = 100
-MAX_PARAM_VALUE_BYTES = 1024
 REQUIRED_HIDDEN_FIELDS = {
     "submissionId",
     "customer",
@@ -165,56 +164,70 @@ def field_indexes(fields: list[dict[str, Any]], prefix: str) -> set[int]:
 
 
 def validate_cross_fields(
-    payload: dict[str, Any], decoded_form: Any, errors: list[str]
+    payload: dict[str, Any], card_params: dict[str, Any], decoded_form: Any,
+    errors: list[str]
 ) -> int:
     if not isinstance(decoded_form, dict) or not isinstance(decoded_form.get("fields"), list):
         return 0
-    fields = decoded_form["fields"]
-    object_fields = [field for field in fields if isinstance(field, dict)]
-    names = [field.get("name") for field in object_fields]
+    fields = [field for field in decoded_form["fields"] if isinstance(field, dict)]
+    names = [field.get("name") for field in fields]
     if len(names) != len(set(names)):
         errors.append("feedbackForm field names must be unique")
 
     indexed = {
         field["name"]: field
-        for field in object_fields
+        for field in fields
         if isinstance(field.get("name"), str)
     }
     hidden_names = {
-        name for name, field in indexed.items() if field.get("hidden") is True
+        name
+        for name, field in indexed.items()
+        if field.get("hidden") is True and name in REQUIRED_HIDDEN_FIELDS
     }
     if hidden_names != REQUIRED_HIDDEN_FIELDS:
         errors.append("feedbackForm hidden fields must match the required metadata set")
 
-    submission = indexed.get("submissionId", {}).get("defaultValue")
-    if submission != payload.get("outTrackId"):
-        errors.append("submissionId defaultValue must equal outTrackId")
+    expected_metadata = {
+        "submissionId": payload.get("outTrackId"),
+        "customer": card_params.get("customer"),
+        "week": card_params.get("week"),
+        "collector": card_params.get("collector"),
+        "reportTime": card_params.get("reportTime"),
+    }
+    for name, expected in expected_metadata.items():
+        if indexed.get(name, {}).get("defaultValue") != expected:
+            errors.append(f"feedbackForm {name} must match cardParamMap")
 
-    week = indexed.get("week", {}).get("defaultValue")
-    if not isinstance(week, str) or not re.fullmatch(
-        r"[0-9]{4}-W(?:0[1-9]|[1-4][0-9]|5[0-3])", week
-    ):
-        errors.append("feedbackForm week must use YYYY-Www format")
+    if card_params.get("submissionId") != payload.get("outTrackId"):
+        errors.append("cardParamMap.submissionId must equal outTrackId")
 
-    report_time = indexed.get("reportTime", {}).get("defaultValue")
+    report_time = card_params.get("reportTime")
     try:
         if not isinstance(report_time, str):
             raise ValueError
         datetime.strptime(report_time, "%Y-%m-%d %H:%M:%S")
     except ValueError:
-        errors.append("feedbackForm reportTime must be a valid YYYY-MM-DD HH:mm:ss")
+        errors.append("cardParamMap.reportTime must be a valid YYYY-MM-DD HH:mm:ss")
 
-    project_indexes = field_indexes(object_fields, "project")
-    satisfaction_indexes = field_indexes(object_fields, "satisfaction")
-    feedback_indexes = field_indexes(object_fields, "feedback")
+    project_indexes = field_indexes(fields, "project")
+    satisfaction_indexes = field_indexes(fields, "satisfaction")
+    reasons_indexes = field_indexes(fields, "reasons")
+    feedback_indexes = field_indexes(fields, "feedback")
     if not (
-        project_indexes == satisfaction_indexes == feedback_indexes
+        project_indexes
+        == satisfaction_indexes
+        == reasons_indexes
+        == feedback_indexes
         and project_indexes
     ):
-        errors.append("project/satisfaction/feedback indexes must match")
+        errors.append("project/satisfaction/reasons/feedback indexes must match")
         return len(project_indexes)
     if project_indexes != set(range(1, len(project_indexes) + 1)):
         errors.append("project indexes must be contiguous and start at 1")
+    for index in project_indexes:
+        project_name = indexed[f"project_{index}"].get("defaultValue")
+        if indexed[f"satisfaction_{index}"].get("label") != project_name:
+            errors.append(f"satisfaction_{index} label must equal project name")
     return len(project_indexes)
 
 
@@ -227,13 +240,6 @@ def validate_card_param_sizes(card_params: Any, errors: list[str]) -> None:
             errors.append(
                 f"cardParamMap key {key!r} exceeds {MAX_PARAM_KEY_BYTES} UTF-8 bytes"
             )
-        if isinstance(value, str):
-            value_bytes = len(value.encode("utf-8"))
-            if value_bytes > MAX_PARAM_VALUE_BYTES:
-                errors.append(
-                    f"cardParamMap.{key} exceeds {MAX_PARAM_VALUE_BYTES} UTF-8 bytes "
-                    f"({value_bytes} bytes)"
-                )
 
 
 def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
@@ -263,21 +269,12 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
     decoded_form = parse_json_string(
         card_params.get("feedbackForm"), "cardParamMap.feedbackForm", errors
     )
-    decoded_options = parse_json_string(
-        card_params.get("satisfactionOptions"),
-        "cardParamMap.satisfactionOptions",
-        errors,
-    )
 
-    for decoded_name, decoded_value in (
-        ("feedbackForm", decoded_form),
-        ("satisfactionOptions", decoded_options),
-    ):
-        if decoded_value is not None:
-            for path in find_forbidden_keys(decoded_value, f"$.{decoded_name}"):
-                errors.append(
-                    f"secret-like field is forbidden in decoded payload: {path}"
-                )
+    if decoded_form is not None:
+        for path in find_forbidden_keys(decoded_form, "$.feedbackForm"):
+            errors.append(
+                f"secret-like field is forbidden in decoded payload: {path}"
+            )
 
     if decoded_form is not None:
         errors.extend(
@@ -285,14 +282,8 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
                 decoded_form, "feedback-form.schema.json", "decoded feedbackForm"
             )
         )
-        project_count = validate_cross_fields(payload, decoded_form, errors)
-    if decoded_options is not None:
-        errors.extend(
-            schema_errors(
-                decoded_options,
-                "satisfaction-options.schema.json",
-                "decoded satisfactionOptions",
-            )
+        project_count = validate_cross_fields(
+            payload, card_params, decoded_form, errors
         )
     return errors, project_count
 

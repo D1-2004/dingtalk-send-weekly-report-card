@@ -44,14 +44,18 @@
           "type": "object",
           "required": [
             "title",
-            "icon",
+            "iconUrl",
             "reportUrl",
             "summaryMarkdown",
             "weeklySummary",
             "feedbackGuide",
             "reportPeriod",
+            "customer",
+            "week",
+            "collector",
+            "reportTime",
+            "submissionId",
             "feedbackForm",
-            "satisfactionOptions",
             "submitButtonText",
             "formState"
           ],
@@ -60,7 +64,7 @@
               "type": "string",
               "minLength": 1
             },
-            "icon": {
+            "iconUrl": {
               "type": "string",
               "pattern": "^https://"
             },
@@ -84,15 +88,32 @@
               "type": "string",
               "minLength": 1
             },
+            "customer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "week": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-W(?:0[1-9]|[1-4][0-9]|5[0-3])$"
+            },
+            "collector": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reportTime": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$"
+            },
+            "submissionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
             "feedbackForm": {
               "type": "string",
               "minLength": 2,
               "$comment": "JSON-encoded object validated separately with feedback-form.schema.json"
-            },
-            "satisfactionOptions": {
-              "type": "string",
-              "minLength": 2,
-              "$comment": "JSON-encoded array validated separately with satisfaction-options.schema.json"
             },
             "submitButtonText": {
               "const": "提交"

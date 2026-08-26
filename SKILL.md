@@ -74,16 +74,22 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 
 ### 4. 调用前校验
 
-先加载用户终端配置，再运行校验器：
+先加载用户终端配置，然后硬性检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`：
 
 ```bash
 source ~/.zshrc
+if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
+  printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
+  exit 1
+fi
 python3 scripts/validate_card_payload.py card-request.json
 ```
 
 构造器和校验器依赖 `jsonschema>=4.18,<5`，版本声明位于 `scripts/requirements.txt`。依赖缺失时停止并提示安装，不得跳过 Schema 校验。
 
-校验器默认同时检查 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 是否存在，但不会输出其值。它会重新解析 `feedbackForm` 和 `satisfactionOptions` 并执行内部 Schema，递归扫描敏感字段，且错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
+校验器默认同时检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 是否存在，但不会输出其值。任一变量不存在或为空时必须报错并终止，禁止继续调用 DWS API。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
+
+校验器会重新解析 `feedbackForm` 和 `satisfactionOptions` 并执行内部 Schema，递归扫描敏感字段，且错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
 
 ### 5. 显式传参调用 DWS API
 
@@ -93,8 +99,8 @@ python3 scripts/validate_card_payload.py card-request.json
 source ~/.zshrc
 python3 scripts/validate_card_payload.py card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
-  --client-id "$DWS_CLIENT_ID" \
-  --client-secret "$DWS_CLIENT_SECRET" \
+  --client-id "$DDWS_CLIENT_ID" \
+  --client-secret "$DDWS_CLIENT_SECRET" \
   --data - \
   --jq '{success,result}' \
   < card-request.json
@@ -140,5 +146,12 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 - 把收集人设置为发起本次卡片任务的用户。
 - 不直接手写 `card-request.json` 中的 JSON 字符串；始终通过构造器生成。
 - 不使用 `--skip-env-check` 执行真实发送；该选项只供离线 Schema 测试。
+- 只使用 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`；任一变量缺失时立即报错并停止，不得执行 `dws api`。
 - 发送前始终运行参数校验器，发送后始终检查每个投递结果。
 - 已注册的回调路由是前置条件；本技能不自动覆盖回调注册。
+
+## 变更历史
+
+| 日期 | 版本 | 改动 | 原因 |
+| --- | --- | --- | --- |
+| 2026-08-26 | v3 | 认证环境变量迁移为 `DDWS_CLIENT_ID`、`DDWS_CLIENT_SECRET`，增加调用前硬性检查 | 避免 DWS 调用读取错误的应用凭证变量或在凭证缺失时继续执行 |

@@ -44,14 +44,20 @@ POST /v1.0/card/instances/createAndDeliver
 python3 scripts/build_card_payload.py weekly-card-input.json \
   --output card-request.json
 source ~/.zshrc
+if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
+  printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
+  exit 1
+fi
 python3 scripts/validate_card_payload.py card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
-  --client-id "$DWS_CLIENT_ID" \
-  --client-secret "$DWS_CLIENT_SECRET" \
+  --client-id "$DDWS_CLIENT_ID" \
+  --client-secret "$DDWS_CLIENT_SECRET" \
   --data - \
   --jq '{success,result}' \
   < card-request.json
 ```
+
+只允许使用 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 作为显式参数值来源。任一变量缺失或为空时立即报错并停止，禁止调用 DWS API。旧变量 `DWS_CLIENT_ID`、`DWS_CLIENT_SECRET` 不视为有效凭证来源。
 
 禁止省略 `--client-id` 和 `--client-secret` 后依赖 DWS 的隐式环境变量注入。禁止把凭证放入 `card-request.json`。
 
@@ -88,5 +94,6 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-26 | v3 | 认证变量改为 `DDWS_CLIENT_ID`、`DDWS_CLIENT_SECRET`，增加 DWS 调用前的阻断检查 | 确保凭证来源明确，并避免缺少应用凭证时继续发送 |
 | 2026-08-26 | v2 | 增加业务、传输和反序列化变量的分层 Schema，收紧未知字段并加入 UTF-8 字节限制 | 修复字符串化嵌套结构可绕过 Schema 和敏感字段扫描的问题 |
 | 2026-08-26 | v1 | 建立 createAndDeliver 请求、显式认证和成功判定契约 | 防止参数遗漏、身份误用和只检查顶层状态造成的误报 |

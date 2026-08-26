@@ -35,6 +35,8 @@ FORBIDDEN_NORMALIZED_KEYS = {
     "authorization",
     "clientid",
     "clientsecret",
+    "ddwsclientid",
+    "ddwsclientsecret",
     "dwsclientid",
     "dwsclientsecret",
     "secretkey",
@@ -240,7 +242,7 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
     project_count = 0
 
     if check_env:
-        for name in ("DWS_CLIENT_ID", "DWS_CLIENT_SECRET"):
+        for name in ("DDWS_CLIENT_ID", "DDWS_CLIENT_SECRET"):
             if not os.environ.get(name):
                 errors.append(f"missing environment variable: {name}")
 

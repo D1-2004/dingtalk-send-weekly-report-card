@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -43,7 +44,49 @@ def run_validator(payload: dict) -> subprocess.CompletedProcess[str]:
     )
 
 
+def run_validator_with_env(
+    payload: dict, environment: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(VALIDATOR), "-"],
+        input=json.dumps(payload, ensure_ascii=False),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+
 class CardPayloadValidationTests(unittest.TestCase):
+    def test_rejects_legacy_dws_credentials_when_ddws_credentials_are_missing(
+        self,
+    ) -> None:
+        environment = os.environ.copy()
+        environment.pop("DDWS_CLIENT_ID", None)
+        environment.pop("DDWS_CLIENT_SECRET", None)
+        environment["DWS_CLIENT_ID"] = "legacy-client-id"
+        environment["DWS_CLIENT_SECRET"] = "legacy-client-secret"
+
+        result = run_validator_with_env(load_example(), environment)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("missing environment variable: DDWS_CLIENT_ID", result.stdout)
+        self.assertIn(
+            "missing environment variable: DDWS_CLIENT_SECRET", result.stdout
+        )
+
+    def test_accepts_ddws_credentials_without_legacy_dws_credentials(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("DWS_CLIENT_ID", None)
+        environment.pop("DWS_CLIENT_SECRET", None)
+        environment["DDWS_CLIENT_ID"] = "ddws-client-id"
+        environment["DDWS_CLIENT_SECRET"] = "ddws-client-secret"
+
+        result = run_validator_with_env(load_example(), environment)
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn('"valid": true', result.stdout)
+
     def test_rejects_secret_like_key_inside_feedback_form(self) -> None:
         payload = load_example()
         fields = decoded_fields(payload)

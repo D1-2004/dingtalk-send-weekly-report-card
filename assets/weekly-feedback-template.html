@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>客户周报满意度回访</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --visual-viewport-height: 100dvh;
+        --page-background: #f3f4f6;
+        --card-background: rgba(255, 255, 255, 0.96);
+        --text-primary: #171a1d;
+        --text-secondary: #747b84;
+        --text-placeholder: #b7bdc5;
+        --brand: #0b7cff;
+        --brand-hover: #006ee6;
+        --border: #e3e6ea;
+        --divider: #e6e8eb;
+        --control-background: #ffffff;
+        --button-background: #f2f3f5;
+        --danger: #e74444;
+        --shadow: 0 12px 40px rgba(31, 35, 41, 0.08);
+        --radius-card: 22px;
+        --radius-control: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--page-background);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 20px 12px;
+        color: var(--text-primary);
+        background:
+          radial-gradient(circle at 15% 5%, rgba(255, 255, 255, 0.95), transparent 28%),
+          var(--page-background);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        touch-action: manipulation;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button,
+      summary,
+      label,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .feedback-card {
+        width: min(100%, 1080px);
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-card);
+        background: var(--card-background);
+        box-shadow: var(--shadow);
+      }
+
+      .card-content {
+        padding: 32px 36px 28px;
+      }
+
+      .card-header {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        align-items: start;
+        gap: 24px;
+      }
+
+      .card-icon {
+        display: block;
+        width: 62px;
+        height: 62px;
+        border-radius: 14px;
+        object-fit: cover;
+      }
+
+      .card-heading {
+        min-width: 0;
+      }
+
+      .card-title {
+        margin: 0;
+        overflow-wrap: anywhere;
+        font-size: clamp(28px, 3.4vw, 38px);
+        font-weight: 400;
+        line-height: 1.18;
+        letter-spacing: -0.02em;
+      }
+
+      .period {
+        margin: 6px 0 0;
+        color: #8d939b;
+        font-size: 22px;
+        line-height: 1.35;
+      }
+
+      .report-link {
+        display: grid;
+        grid-template-columns: 64px max-content;
+        align-items: center;
+        gap: 24px;
+        margin-top: 12px;
+        color: var(--brand);
+        font-size: 29px;
+        font-weight: 400;
+        line-height: 1.35;
+        text-decoration: none;
+      }
+
+      .report-link:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid rgba(11, 124, 255, 0.24);
+        outline-offset: 2px;
+      }
+
+      .report-link__icon {
+        display: grid;
+        width: 62px;
+        height: 54px;
+        place-items: center;
+        color: #a9adb3;
+        font-size: 43px;
+      }
+
+      .weekly-summary {
+        margin: 60px 0 0;
+        padding: 0 0 34px;
+        border-bottom: 1px solid var(--divider);
+        list-style: none;
+      }
+
+      .weekly-summary li {
+        position: relative;
+        margin-top: 20px;
+        padding-left: 58px;
+        font-size: 27px;
+        line-height: 1.48;
+      }
+
+      .weekly-summary li:first-child {
+        margin-top: 0;
+      }
+
+      .weekly-summary li::before {
+        position: absolute;
+        top: 0;
+        left: 8px;
+        content: "•";
+        font-weight: 700;
+      }
+
+      .project-list {
+        display: grid;
+      }
+
+      .project-row {
+        padding: 18px 0 20px;
+        border-bottom: 1px solid var(--divider);
+      }
+
+      .project-row:first-child {
+        padding-top: 20px;
+      }
+
+      .project-row:last-child {
+        padding-bottom: 10px;
+        border-bottom: 0;
+      }
+
+      .project-main {
+        --reason-inline-offset: 124px;
+        display: grid;
+        grid-template-areas:
+          "name satisfaction ."
+          "name satisfaction reason";
+        grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.62fr) minmax(250px, 1.85fr);
+        grid-template-rows: repeat(2, minmax(40px, auto));
+        align-items: start;
+        column-gap: 16px;
+      }
+
+      .project-name {
+        grid-area: name;
+        margin: 4px 0 0;
+        overflow-wrap: anywhere;
+        font-size: 25px;
+        font-weight: 400;
+        line-height: 1.45;
+      }
+
+      .satisfaction-options {
+        grid-area: satisfaction;
+        display: grid;
+        grid-template-rows: repeat(2, minmax(40px, auto));
+      }
+
+      .satisfaction-option {
+        display: inline-flex;
+        width: max-content;
+        max-width: 100%;
+        cursor: pointer;
+        align-items: center;
+        gap: 9px;
+        font-size: 25px;
+        line-height: 1.35;
+      }
+
+      .satisfaction-option input,
+      .reason-option input {
+        width: 24px;
+        height: 24px;
+        margin: 0;
+        cursor: pointer;
+        accent-color: var(--brand);
+      }
+
+      .satisfaction-option input {
+        appearance: none;
+        border: 2px solid #d7dbe0;
+        border-radius: 7px;
+        background: #ffffff;
+      }
+
+      .satisfaction-option input:checked {
+        border: 7px solid var(--brand);
+        background: #ffffff;
+      }
+
+      .project-row.is-invalid .satisfaction-options {
+        padding: 6px;
+        border-radius: 12px;
+        background: rgba(231, 68, 68, 0.07);
+      }
+
+      .feedback-trigger {
+        display: flex;
+        width: 100%;
+        min-height: 44px;
+        margin-top: 8px;
+        cursor: pointer;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-control);
+        color: var(--text-placeholder);
+        background: var(--control-background);
+        font-size: 16px;
+        text-align: left;
+      }
+
+      .feedback-trigger.has-value {
+        color: var(--text-primary);
+      }
+
+      .feedback-trigger__text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .feedback-trigger i {
+        flex: 0 0 auto;
+        color: #9aa0a7;
+        font-size: 18px;
+      }
+
+      .reason-picker {
+        grid-area: reason;
+        grid-row: 2;
+        grid-column: 2 / 4;
+        position: relative;
+        align-self: center;
+        justify-self: stretch;
+        min-width: 0;
+        margin: 0;
+      }
+
+      .reason-picker > summary {
+        display: inline-flex;
+        width: max-content;
+        max-width: calc(100% - var(--reason-inline-offset));
+        min-height: 40px;
+        margin-left: var(--reason-inline-offset);
+        cursor: pointer;
+        list-style: none;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+        padding: 0 4px;
+        border: 0;
+        border-radius: 8px;
+        color: #9aa0a7;
+        background: transparent;
+        font-size: 14px;
+      }
+
+      .reason-picker > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .reason-picker[open] > summary {
+        color: #7e858d;
+      }
+
+      .reason-picker.has-value > summary {
+        color: #9aa0a7;
+      }
+
+      .reason-picker > summary i {
+        color: #9aa0a7;
+        transition: transform 160ms ease;
+      }
+
+      .reason-summary-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .reason-summary-text:empty {
+        display: none;
+      }
+
+      .reason-picker[open] > summary i {
+        transform: rotate(180deg);
+      }
+
+      .reason-options {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 8px);
+        right: auto;
+        left: 0;
+        display: grid;
+        width: min(360px, 100%);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 14px 32px rgba(31, 35, 41, 0.14);
+      }
+
+      .reason-option {
+        display: flex;
+        min-height: 42px;
+        cursor: pointer;
+        align-items: center;
+        gap: 9px;
+        padding: 6px 9px;
+        border-radius: 10px;
+        font-size: 15px;
+      }
+
+      .reason-option input {
+        width: 19px;
+        height: 19px;
+      }
+
+      .submit-area {
+        margin-top: 16px;
+        padding: 0 72px;
+      }
+
+      .submit-button {
+        width: 100%;
+        min-height: 56px;
+        cursor: pointer;
+        border: 0;
+        border-radius: 28px;
+        color: var(--brand);
+        background: var(--button-background);
+        font-size: 20px;
+        font-weight: 500;
+        transition:
+          color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease;
+      }
+
+      .submit-button:disabled {
+        cursor: not-allowed;
+        color: #969ca4;
+      }
+
+      .submit-message {
+        min-height: 22px;
+        margin: 8px 6px 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      .submit-message.is-error {
+        color: var(--danger);
+      }
+
+      .feedback-card.is-submitted .feedback-trigger,
+      .feedback-card.is-submitted .reason-picker > summary,
+      .feedback-card.is-submitted .satisfaction-option {
+        cursor: not-allowed;
+        opacity: 0.64;
+      }
+
+      .feedback-dialog {
+        width: min(calc(100% - 32px), 560px);
+        padding: 0;
+        border: 0;
+        border-radius: 20px;
+        color: var(--text-primary);
+        background: #ffffff;
+        box-shadow: 0 24px 70px rgba(31, 35, 41, 0.24);
+      }
+
+      .feedback-dialog::backdrop {
+        background: rgba(18, 21, 26, 0.42);
+        backdrop-filter: blur(3px);
+      }
+
+      .data-error {
+        padding: 28px 24px;
+      }
+
+      .data-error__title {
+        margin: 0;
+        color: var(--danger);
+        font-size: 22px;
+      }
+
+      .data-error__message {
+        margin: 12px 0 0;
+        color: var(--text-secondary);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .dialog-form {
+        padding: 24px;
+      }
+
+      .dialog-title {
+        margin: 0;
+        font-size: 23px;
+        font-weight: 600;
+      }
+
+      .dialog-subtitle {
+        margin: 8px 0 16px;
+        color: var(--text-secondary);
+        font-size: 15px;
+      }
+
+      .feedback-input {
+        display: block;
+        width: 100%;
+        min-height: 112px;
+        resize: vertical;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        color: var(--text-primary);
+        background: #ffffff;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .dialog-button {
+        min-width: 92px;
+        min-height: 42px;
+        cursor: pointer;
+        border: 0;
+        border-radius: 12px;
+        font-weight: 600;
+      }
+
+      .dialog-button--secondary {
+        color: var(--text-primary);
+        background: #f0f2f5;
+      }
+
+      .dialog-button--primary {
+        color: #ffffff;
+        background: var(--brand);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        .report-link:hover {
+          color: var(--brand-hover);
+          text-decoration: underline;
+          text-underline-offset: 4px;
+        }
+
+        .feedback-trigger:hover,
+        .reason-picker > summary:hover {
+          border-color: #cfd4da;
+          color: var(--text-secondary);
+        }
+
+        .reason-option:hover {
+          background: #f5f7fa;
+        }
+
+        .submit-button:hover:not(:disabled) {
+          color: #ffffff;
+          background: var(--brand);
+          transform: translateY(-1px);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .card-content {
+          padding: 28px 30px 24px;
+        }
+
+        .card-header {
+          grid-template-columns: 54px minmax(0, 1fr);
+          gap: 18px;
+        }
+
+        .card-icon {
+          width: 52px;
+          height: 52px;
+          border-radius: 12px;
+        }
+
+        .card-title {
+          font-size: clamp(26px, 4.2vw, 34px);
+        }
+
+        .period {
+          font-size: 18px;
+        }
+
+        .report-link {
+          grid-template-columns: 54px max-content;
+          gap: 18px;
+          font-size: 25px;
+        }
+
+        .report-link__icon {
+          width: 52px;
+          font-size: 37px;
+        }
+
+        .weekly-summary {
+          margin-top: 36px;
+          padding-bottom: 24px;
+        }
+
+        .weekly-summary li {
+          margin-top: 14px;
+          padding-left: 42px;
+          font-size: 22px;
+        }
+
+        .project-main {
+          --reason-inline-offset: 108px;
+          grid-template-areas:
+            "name satisfaction ."
+            "name satisfaction reason";
+          grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.7fr) minmax(180px, 1.7fr);
+          grid-template-rows: repeat(2, minmax(44px, auto));
+          column-gap: 12px;
+          row-gap: 0;
+        }
+
+        .satisfaction-options {
+          grid-template-rows: repeat(2, minmax(44px, auto));
+        }
+
+        .project-name,
+        .satisfaction-option {
+          font-size: 22px;
+        }
+
+        .reason-picker {
+          margin-top: 0;
+        }
+      }
+
+      @media (max-width: 620px) {
+        body {
+          padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+        }
+
+        .feedback-card {
+          border-radius: 18px;
+        }
+
+        .card-content {
+          padding: 18px 16px 14px;
+        }
+
+        .card-header {
+          grid-template-columns: 46px minmax(0, 1fr);
+          gap: 12px;
+        }
+
+        .card-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+        }
+
+        .card-title {
+          font-size: clamp(21px, 6.6vw, 27px);
+        }
+
+        .period {
+          margin-top: 3px;
+          font-size: 15px;
+        }
+
+        .report-link {
+          grid-template-columns: 44px max-content;
+          gap: 12px;
+          margin-top: 12px;
+          min-height: 44px;
+          font-size: 20px;
+        }
+
+        .report-link__icon {
+          width: 44px;
+          height: 40px;
+          font-size: 30px;
+        }
+
+        .weekly-summary {
+          margin: 26px 0 0;
+          padding-bottom: 20px;
+        }
+
+        .weekly-summary li {
+          margin-top: 9px;
+          padding-left: 28px;
+          font-size: 17px;
+        }
+
+        .project-row {
+          padding: 12px 0 14px;
+        }
+
+        .project-row:first-child {
+          padding-top: 14px;
+        }
+
+        .project-row:last-child {
+          padding-bottom: 8px;
+        }
+
+        .project-main {
+          --reason-inline-offset: 80px;
+          grid-template-areas:
+            "name satisfaction ."
+            "name satisfaction reason";
+          grid-template-columns: minmax(78px, 1fr) minmax(82px, 0.82fr) minmax(110px, 1.5fr);
+          grid-template-rows: repeat(2, minmax(44px, auto));
+          column-gap: 6px;
+          row-gap: 0;
+        }
+
+        .project-name,
+        .satisfaction-option {
+          font-size: 16px;
+        }
+
+        .satisfaction-option {
+          gap: 6px;
+          min-height: 44px;
+        }
+
+        .satisfaction-options {
+          grid-template-rows: repeat(2, minmax(44px, auto));
+        }
+
+        .satisfaction-option input {
+          width: 22px;
+          height: 22px;
+        }
+
+        .feedback-trigger {
+          min-height: 44px;
+          margin-top: 8px;
+          padding: 0 12px;
+          border-radius: 15px;
+          font-size: 16px;
+        }
+
+        .feedback-trigger i {
+          font-size: 18px;
+        }
+
+        .reason-picker > summary {
+          min-height: 44px;
+          gap: 4px;
+          padding: 0;
+          border-radius: 8px;
+          font-size: 12px;
+        }
+
+        .reason-picker > summary i {
+          font-size: 11px;
+        }
+
+        .reason-options {
+          position: absolute;
+          right: auto;
+          left: 0;
+          width: min(280px, 100%);
+          grid-template-columns: 1fr;
+          margin-top: 8px;
+          padding: 8px;
+          border-radius: 14px;
+          background: #ffffff;
+          box-shadow: 0 12px 28px rgba(31, 35, 41, 0.16);
+        }
+
+        .reason-option {
+          min-height: 44px;
+          padding: 8px 10px;
+        }
+
+        .submit-button {
+          min-height: 48px;
+          font-size: 18px;
+        }
+
+        .submit-area {
+          margin-top: 14px;
+          padding: 0 18px;
+        }
+
+        .feedback-dialog {
+          inset: auto 8px max(8px, env(safe-area-inset-bottom)) 8px;
+          width: auto;
+          max-width: none;
+          max-height: calc(var(--visual-viewport-height) - 16px);
+          margin: 0;
+          border-radius: 22px 22px 14px 14px;
+        }
+
+        .dialog-form {
+          max-height: calc(var(--visual-viewport-height) - 16px);
+          overflow: auto;
+          padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
+          overscroll-behavior: contain;
+        }
+
+        .dialog-title {
+          font-size: 21px;
+        }
+
+        .feedback-input {
+          min-height: 120px;
+          max-height: min(24dvh, 180px);
+          resize: none;
+          font-size: 16px;
+        }
+
+        .dialog-actions {
+          position: sticky;
+          bottom: 0;
+          padding-top: 12px;
+          background: #ffffff;
+        }
+
+        .dialog-button {
+          flex: 1 1 0;
+          min-height: 48px;
+        }
+      }
+
+      @media (max-width: 380px) {
+        .card-content {
+          padding-right: 14px;
+          padding-left: 14px;
+        }
+
+        .project-main {
+          grid-template-columns: minmax(70px, 1fr) minmax(78px, 0.82fr) minmax(104px, 1.45fr);
+          grid-template-areas:
+            "name satisfaction ."
+            "name satisfaction reason";
+          column-gap: 6px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="feedback-card" id="feedbackCard" aria-labelledby="cardTitle">
+      <div class="card-content">
+        <header class="card-header">
+          <img class="card-icon" id="cardIcon" alt="" />
+          <div class="card-heading">
+            <h1 class="card-title" id="cardTitle"></h1>
+            <p class="period" id="reportPeriod"></p>
+          </div>
+        </header>
+
+        <a class="report-link" id="reportLink" target="_blank" rel="noopener noreferrer">
+          <span class="report-link__icon" aria-hidden="true">
+            <i class="fa-regular fa-file-lines"></i>
+          </span>
+          <span id="reportLinkText"></span>
+        </a>
+
+        <ul class="weekly-summary" id="weeklySummary"></ul>
+
+        <section class="project-list" id="projectList" aria-label="项目反馈"></section>
+
+        <div class="submit-area">
+          <button class="submit-button" id="submitButton" type="button"></button>
+          <p class="submit-message" id="submitMessage" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </article>
+
+    <dialog class="feedback-dialog" id="feedbackDialog">
+      <form class="dialog-form" method="dialog" id="dialogForm">
+        <h2 class="dialog-title">填写具体反馈</h2>
+        <p class="dialog-subtitle" id="dialogProjectName"></p>
+        <textarea
+          class="feedback-input"
+          id="feedbackInput"
+          maxlength="1000"
+          placeholder="请输入具体反馈（可选）"
+        ></textarea>
+        <div class="dialog-actions">
+          <button class="dialog-button dialog-button--secondary" value="cancel" type="submit">取消</button>
+          <button class="dialog-button dialog-button--primary" id="saveFeedback" value="default" type="submit">
+            保存
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <!--
+      唯一需要替换的数据区：生成时只替换 weeklyReportCardData 标签内的 JSON 文本。
+      必须使用严格 JSON；字符串中如出现 </script>，序列化时需写成 <\/script>。
+
+      WeeklyReportCardData 接口：
+      {
+        schemaVersion: 1,
+        iconUrl: string, title: string, reportUrl: string,
+        reportLinkText?: string, summaryMarkdown: string[],
+        projects: Array<{
+          id: string, name: string,
+          satisfaction?: "" | "满意" | "不满意",
+          reasons?: string[], feedback?: string,
+          reasonOptions?: Array<{ value: string, text?: { zh_CN?: string } }>
+        }>,
+        dissatisfactionOptions: string[],
+        submitButtonText?: string, submittedButtonText?: string,
+        reportPeriod: string, customer: string, week: string,
+        collector: string, reportTime: string, submissionId: string,
+        callbackUrl?: string, callbackHeaders?: Record<string, string>,
+        formDisabled?: boolean
+      }
+    -->
+    <script type="application/json" id="weeklyReportCardData">
+      {
+        "schemaVersion": 1,
+        "iconUrl": "https://img.alicdn.com/imgextra/i4/O1CN01IPbS5e1f6ok5Oa1EH_!!6000000003958-2-tps-96-96.png",
+        "title": "维信诺项目周报回访",
+        "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+        "reportLinkText": "查看完整周报",
+        "summaryMarkdown": [
+          "本周新增需求 **11** 项，其中 **2** 项已完成",
+          "当前 **6** 个工单处理中，**2** 个已关闭",
+          "重点跟进文档/表格操作体验及多人协同问题"
+        ],
+        "projects": [
+          {
+            "id": "p1",
+            "name": "智能助理项目",
+            "satisfaction": "",
+            "reasons": [],
+            "feedback": ""
+          },
+          {
+            "id": "p2",
+            "name": "数据看板项目",
+            "satisfaction": "",
+            "reasons": [],
+            "feedback": ""
+          }
+        ],
+        "dissatisfactionOptions": [
+          "响应不及时",
+          "问题未解决",
+          "交付质量不佳",
+          "沟通体验不佳",
+          "需求理解偏差",
+          "其他"
+        ],
+        "submitButtonText": "提交",
+        "submittedButtonText": "已提交",
+        "reportPeriod": "2026年3月31日—2026年4月10日",
+        "customer": "维信诺",
+        "week": "2026-W15",
+        "collector": "辰驷",
+        "reportTime": "2026-08-27 10:00:00",
+        "submissionId": "CARD-MOCK-2026-W15",
+        "callbackUrl": "",
+        "callbackHeaders": {},
+        "formDisabled": false
+      }
+    </script>
+
+    <script>
+      (() => {
+        let params;
+        try {
+          params = parseCardData();
+        } catch (error) {
+          renderDataError(error);
+          console.error("周报卡片数据解析失败", error);
+          return;
+        }
+
+        const projects = normalizeProjects(params.projects);
+        const state = {
+          projects,
+          activeProjectId: null,
+          submitted: Boolean(params.formDisabled),
+        };
+
+        const elements = {
+          card: document.querySelector("#feedbackCard"),
+          icon: document.querySelector("#cardIcon"),
+          title: document.querySelector("#cardTitle"),
+          reportLink: document.querySelector("#reportLink"),
+          reportLinkText: document.querySelector("#reportLinkText"),
+          summary: document.querySelector("#weeklySummary"),
+          projectList: document.querySelector("#projectList"),
+          submitButton: document.querySelector("#submitButton"),
+          submitMessage: document.querySelector("#submitMessage"),
+          period: document.querySelector("#reportPeriod"),
+          dialog: document.querySelector("#feedbackDialog"),
+          dialogForm: document.querySelector("#dialogForm"),
+          dialogProjectName: document.querySelector("#dialogProjectName"),
+          feedbackInput: document.querySelector("#feedbackInput"),
+        };
+
+        /**
+         * @typedef {Object} WeeklyReportProject
+         * @property {string} id
+         * @property {string} name
+         * @property {""|"满意"|"不满意"} [satisfaction]
+         * @property {string[]} [reasons]
+         * @property {string} [feedback]
+         * @property {{value: string, text?: {zh_CN?: string}}[]} [reasonOptions]
+         */
+
+        /**
+         * @typedef {Object} WeeklyReportCardData
+         * @property {1} schemaVersion
+         * @property {string} iconUrl
+         * @property {string} title
+         * @property {string} reportUrl
+         * @property {string[]} summaryMarkdown
+         * @property {WeeklyReportProject[]} projects
+         * @property {string[]} dissatisfactionOptions
+         * @property {string} reportPeriod
+         * @property {string} customer
+         * @property {string} week
+         * @property {string} collector
+         * @property {string} reportTime
+         * @property {string} submissionId
+         * @property {string} callbackUrl
+         */
+
+        /** @returns {WeeklyReportCardData} */
+        function parseCardData() {
+          const dataElement = document.querySelector("#weeklyReportCardData");
+          if (!dataElement) throw new Error("缺少 weeklyReportCardData 数据块");
+
+          let source;
+          try {
+            source = JSON.parse(dataElement.textContent);
+          } catch (error) {
+            throw new Error(`weeklyReportCardData 不是合法 JSON：${error.message}`);
+          }
+
+          return validateCardData(source);
+        }
+
+        /** @returns {WeeklyReportCardData} */
+        function validateCardData(source) {
+          if (!source || typeof source !== "object" || Array.isArray(source)) {
+            throw new Error("卡片数据必须是 JSON 对象");
+          }
+          if (source.schemaVersion !== 1) throw new Error("schemaVersion 必须为 1");
+
+          const requiredStrings = [
+            "iconUrl",
+            "title",
+            "reportUrl",
+            "reportPeriod",
+            "customer",
+            "week",
+            "collector",
+            "reportTime",
+            "submissionId",
+          ];
+          requiredStrings.forEach((field) => {
+            if (typeof source[field] !== "string" || !source[field].trim()) {
+              throw new Error(`${field} 必须是非空字符串`);
+            }
+          });
+
+          if (!Array.isArray(source.summaryMarkdown)) {
+            throw new Error("summaryMarkdown 必须是字符串数组");
+          }
+          if (!source.summaryMarkdown.every((item) => typeof item === "string")) {
+            throw new Error("summaryMarkdown 只能包含字符串");
+          }
+          if (!Array.isArray(source.dissatisfactionOptions)) {
+            throw new Error("dissatisfactionOptions 必须是字符串数组");
+          }
+          if (!source.dissatisfactionOptions.every((item) => typeof item === "string")) {
+            throw new Error("dissatisfactionOptions 只能包含字符串");
+          }
+          if (!Array.isArray(source.projects) || source.projects.length === 0) {
+            throw new Error("projects 必须是非空数组");
+          }
+
+          const projectIds = new Set();
+          source.projects.forEach((project, index) => {
+            if (!project || typeof project !== "object" || Array.isArray(project)) {
+              throw new Error(`projects[${index}] 必须是对象`);
+            }
+            if (typeof project.id !== "string" || !project.id.trim()) {
+              throw new Error(`projects[${index}].id 必须是非空字符串`);
+            }
+            if (projectIds.has(project.id)) throw new Error(`项目 id 重复：${project.id}`);
+            projectIds.add(project.id);
+            if (typeof project.name !== "string" || !project.name.trim()) {
+              throw new Error(`projects[${index}].name 必须是非空字符串`);
+            }
+            if (project.satisfaction && !["满意", "不满意"].includes(project.satisfaction)) {
+              throw new Error(`projects[${index}].satisfaction 只能是满意或不满意`);
+            }
+            if (project.reasons !== undefined && !Array.isArray(project.reasons)) {
+              throw new Error(`projects[${index}].reasons 必须是数组`);
+            }
+            if (
+              Array.isArray(project.reasons) &&
+              !project.reasons.every((reason) => typeof reason === "string")
+            ) {
+              throw new Error(`projects[${index}].reasons 只能包含字符串`);
+            }
+            if (project.feedback !== undefined && typeof project.feedback !== "string") {
+              throw new Error(`projects[${index}].feedback 必须是字符串`);
+            }
+            if (project.reasonOptions !== undefined && !Array.isArray(project.reasonOptions)) {
+              throw new Error(`projects[${index}].reasonOptions 必须是数组`);
+            }
+            project.reasonOptions?.forEach((option, optionIndex) => {
+              if (!option || typeof option !== "object" || Array.isArray(option)) {
+                throw new Error(`projects[${index}].reasonOptions[${optionIndex}] 必须是对象`);
+              }
+              if (typeof option.value !== "string" || !option.value.trim()) {
+                throw new Error(
+                  `projects[${index}].reasonOptions[${optionIndex}].value 必须是非空字符串`,
+                );
+              }
+              if (
+                option.text !== undefined &&
+                (!option.text || typeof option.text !== "object" || Array.isArray(option.text))
+              ) {
+                throw new Error(
+                  `projects[${index}].reasonOptions[${optionIndex}].text 必须是对象`,
+                );
+              }
+              if (option.text?.zh_CN !== undefined && typeof option.text.zh_CN !== "string") {
+                throw new Error(
+                  `projects[${index}].reasonOptions[${optionIndex}].text.zh_CN 必须是字符串`,
+                );
+              }
+            });
+          });
+
+          const optionalStrings = [
+            "reportLinkText",
+            "submitButtonText",
+            "submittedButtonText",
+            "callbackUrl",
+          ];
+          optionalStrings.forEach((field) => {
+            if (source[field] !== undefined && typeof source[field] !== "string") {
+              throw new Error(`${field} 必须是字符串`);
+            }
+          });
+          if (source.formDisabled !== undefined && typeof source.formDisabled !== "boolean") {
+            throw new Error("formDisabled 必须是布尔值");
+          }
+
+          if (
+            source.callbackHeaders !== undefined &&
+            (!source.callbackHeaders ||
+              typeof source.callbackHeaders !== "object" ||
+              Array.isArray(source.callbackHeaders))
+          ) {
+            throw new Error("callbackHeaders 必须是 JSON 对象");
+          }
+          if (
+            source.callbackHeaders &&
+            !Object.entries(source.callbackHeaders).every(
+              ([key, value]) => typeof key === "string" && typeof value === "string",
+            )
+          ) {
+            throw new Error("callbackHeaders 的键和值都必须是字符串");
+          }
+
+          return {
+            reportLinkText: "查看完整周报",
+            submitButtonText: "提交",
+            submittedButtonText: "已提交",
+            callbackUrl: "",
+            callbackHeaders: {},
+            formDisabled: false,
+            ...source,
+          };
+        }
+
+        function renderDataError(error) {
+          const card = document.querySelector("#feedbackCard");
+          const content = document.createElement("section");
+          const title = document.createElement("h1");
+          const message = document.createElement("p");
+          content.className = "data-error";
+          title.className = "data-error__title";
+          message.className = "data-error__message";
+          title.textContent = "卡片数据无法加载";
+          message.textContent = error?.message || "请检查 weeklyReportCardData JSON 数据块";
+          content.append(title, message);
+          card.replaceChildren(content);
+        }
+
+        function safeHttpUrl(value) {
+          try {
+            const url = new URL(value, window.location.href);
+            return ["http:", "https:"].includes(url.protocol) ? url.href : "#";
+          } catch {
+            return "#";
+          }
+        }
+
+        function normalizeSummary(value) {
+          if (Array.isArray(value)) return value.filter(Boolean).map(String);
+          return String(value || "")
+            .split(/\r?\n/)
+            .map((line) => line.replace(/^\s*[-*•]\s*/, "").trim())
+            .filter(Boolean);
+        }
+
+        function normalizeProjects(value) {
+          return value.map((source, index) => {
+            const id = String(source.id || `p${index + 1}`);
+            const globalReasons = params.dissatisfactionOptions || [];
+            const reasonOptions = Array.isArray(source.reasonOptions)
+              ? source.reasonOptions.map((option) => ({
+                  value: String(option.value || ""),
+                  text: option.text || { zh_CN: String(option.value || "") },
+                }))
+              : globalReasons.map((reason) => ({ value: reason, text: { zh_CN: reason } }));
+            const reasons = Array.isArray(source.reasons) ? source.reasons.map(String) : [];
+
+            return {
+              id,
+              name: String(source.name || source.project || `项目 ${index + 1}`),
+              satisfaction: String(source.satisfaction || ""),
+              reasonOptions,
+              reasons,
+              feedback: String(source.feedback || ""),
+            };
+          });
+        }
+
+        function appendInlineMarkdown(parent, value) {
+          const fragments = String(value).split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+          fragments.forEach((fragment) => {
+            if (fragment.startsWith("**") && fragment.endsWith("**")) {
+              parent.append(createElement("strong", "", fragment.slice(2, -2)));
+            } else {
+              parent.append(document.createTextNode(fragment));
+            }
+          });
+        }
+
+        function selectedReasonText(project) {
+          const values = Array.isArray(project.reasons) ? project.reasons : [];
+          if (!values.length) return "";
+          return values.join("，");
+        }
+
+        function createElement(tagName, className, text) {
+          const element = document.createElement(tagName);
+          if (className) element.className = className;
+          if (text !== undefined) element.textContent = text;
+          return element;
+        }
+
+        function renderSummary() {
+          elements.summary.replaceChildren();
+          const lines = normalizeSummary(params.summaryMarkdown || params.weeklySummary);
+          elements.summary.hidden = lines.length === 0;
+          lines.forEach((line) => {
+            const item = createElement("li");
+            appendInlineMarkdown(item, line);
+            elements.summary.append(item);
+          });
+        }
+
+        function renderProjects() {
+          elements.projectList.replaceChildren();
+
+          state.projects.forEach((project) => {
+            const row = createElement("article", "project-row");
+            row.dataset.projectId = project.id;
+
+            const main = createElement("div", "project-main");
+            const name = createElement("h2", "project-name", project.name);
+            const satisfaction = createElement("div", "satisfaction-options");
+            satisfaction.setAttribute("role", "radiogroup");
+            satisfaction.setAttribute("aria-label", `${project.name}满意度`);
+
+            ["满意", "不满意"].forEach((value) => {
+              const label = createElement("label", "satisfaction-option");
+              const input = document.createElement("input");
+              input.type = "radio";
+              input.name = `satisfaction-${project.id}`;
+              input.value = value;
+              input.checked = project.satisfaction === value;
+              input.disabled = state.submitted;
+              input.addEventListener("change", () => {
+                project.satisfaction = value;
+                row.classList.remove("is-invalid");
+              });
+              label.append(input, createElement("span", "", value));
+              satisfaction.append(label);
+            });
+
+            const feedbackButton = createElement("button", "feedback-trigger");
+            feedbackButton.type = "button";
+            feedbackButton.disabled = state.submitted;
+            feedbackButton.setAttribute("aria-label", `填写${project.name}具体反馈`);
+            const feedbackText = createElement(
+              "span",
+              "feedback-trigger__text",
+              project.feedback || "反馈",
+            );
+            const feedbackIcon = createElement("i", "fa-regular fa-pen-to-square");
+            feedbackIcon.setAttribute("aria-hidden", "true");
+            feedbackButton.classList.toggle("has-value", Boolean(project.feedback));
+            feedbackButton.append(feedbackText, feedbackIcon);
+            feedbackButton.addEventListener("click", () => openFeedbackDialog(project));
+
+            const details = createElement("details", "reason-picker");
+            details.classList.toggle("has-value", Boolean(project.reasons?.length));
+            details.addEventListener("toggle", () => {
+              if (!details.open) return;
+              elements.projectList.querySelectorAll("details[open]").forEach((other) => {
+                if (other !== details) other.removeAttribute("open");
+              });
+            });
+            const summary = createElement("summary");
+            const summaryText = createElement(
+              "span",
+              "reason-summary-text",
+              selectedReasonText(project),
+            );
+            const syncReasonSummaryLabel = () => {
+              const selectedText = selectedReasonText(project);
+              summary.setAttribute(
+                "aria-label",
+                selectedText ? `已选择不满意原因：${selectedText}，点击修改` : "选择不满意原因",
+              );
+            };
+            const chevron = createElement("i", "fa-solid fa-chevron-down");
+            chevron.setAttribute("aria-hidden", "true");
+            summary.append(summaryText, chevron);
+            syncReasonSummaryLabel();
+            summary.addEventListener("click", (event) => {
+              if (state.submitted) event.preventDefault();
+            });
+
+            const reasonOptions = createElement("div", "reason-options");
+            project.reasonOptions.forEach((reasonOption) => {
+              const reason = reasonOption.value;
+              const label = createElement("label", "reason-option");
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.value = reason;
+              checkbox.checked = Boolean(project.reasons?.includes(reason));
+              checkbox.disabled = state.submitted;
+              checkbox.addEventListener("change", () => {
+                project.reasons ||= [];
+                if (checkbox.checked) {
+                  if (!project.reasons.includes(reason)) project.reasons.push(reason);
+                } else {
+                  project.reasons = project.reasons.filter((item) => item !== reason);
+                }
+                summaryText.textContent = selectedReasonText(project);
+                syncReasonSummaryLabel();
+                details.classList.toggle("has-value", project.reasons.length > 0);
+              });
+              label.append(checkbox, createElement("span", "", reason));
+              reasonOptions.append(label);
+            });
+
+            details.append(summary, reasonOptions);
+            main.append(name, satisfaction, details);
+            row.append(main, feedbackButton);
+            elements.projectList.append(row);
+          });
+        }
+
+        function openFeedbackDialog(project) {
+          if (state.submitted) return;
+          state.activeProjectId = project.id;
+          elements.dialogProjectName.textContent = project.name;
+          elements.feedbackInput.value = project.feedback || "";
+          elements.dialog.showModal();
+          syncVisualViewport();
+          requestAnimationFrame(() => elements.feedbackInput.focus());
+        }
+
+        function syncVisualViewport() {
+          const height = window.visualViewport?.height || window.innerHeight;
+          document.documentElement.style.setProperty(
+            "--visual-viewport-height",
+            `${Math.round(height)}px`,
+          );
+        }
+
+        window.visualViewport?.addEventListener("resize", syncVisualViewport);
+        window.addEventListener("resize", syncVisualViewport);
+
+        document.addEventListener("pointerdown", (event) => {
+          if (!window.matchMedia("(min-width: 621px)").matches) return;
+          if (event.target.closest(".reason-picker")) return;
+          elements.projectList.querySelectorAll("details[open]").forEach((details) => {
+            details.removeAttribute("open");
+          });
+        });
+
+        elements.dialog.addEventListener("close", () => {
+          if (elements.dialog.returnValue !== "default") return;
+          const project = state.projects.find((item) => item.id === state.activeProjectId);
+          if (!project) return;
+          project.feedback = elements.feedbackInput.value.trim();
+          renderProjects();
+        });
+
+        function buildPayload() {
+          const projectRows = state.projects.map((project, index) => {
+            const satisfactionOptions = ["满意", "不满意"].map((value) => ({
+              projectId: project.id || `p${index + 1}`,
+              value,
+              text: value,
+              checked: project.satisfaction === value,
+            }));
+            const selectedReasonIndexes = project.reasons
+              .map((reason) => project.reasonOptions.findIndex((option) => option.value === reason))
+              .filter((reasonIndex) => reasonIndex >= 0);
+
+            return {
+              id: project.id || `p${index + 1}`,
+              name: project.name,
+              satisfaction: project.satisfaction,
+              satisfactionOptions,
+              reasonOptions: project.reasonOptions,
+              selectedReasonIndexes,
+              feedback: project.feedback || "",
+            };
+          });
+
+          return {
+            action: "submit_weekly_feedback",
+            title: params.title,
+            reportUrl: params.reportUrl,
+            customer: params.customer,
+            week: params.week,
+            collector: params.collector,
+            reportTime: params.reportTime,
+            submissionId: params.submissionId,
+            projectRows,
+            projectRowsJson: JSON.stringify(projectRows),
+          };
+        }
+
+        function validate() {
+          let valid = true;
+          elements.projectList.querySelectorAll(".project-row").forEach((row) => {
+            const project = state.projects.find((item) => item.id === row.dataset.projectId);
+            const invalid = !project?.satisfaction;
+            row.classList.toggle("is-invalid", invalid);
+            valid = valid && !invalid;
+          });
+          return valid;
+        }
+
+        function setSubmitted() {
+          state.submitted = true;
+          elements.card.classList.add("is-submitted");
+          elements.submitButton.textContent = params.submittedButtonText || "已提交";
+          elements.submitButton.disabled = true;
+          renderProjects();
+        }
+
+        async function submitFeedback() {
+          elements.submitMessage.classList.remove("is-error");
+          elements.submitMessage.textContent = "";
+
+          if (!validate()) {
+            elements.submitMessage.classList.add("is-error");
+            elements.submitMessage.textContent = "请先完成每个项目的满意度选择";
+            elements.projectList.querySelector(".project-row.is-invalid input")?.focus();
+            return;
+          }
+
+          const payload = buildPayload();
+          elements.submitButton.disabled = true;
+          elements.submitButton.textContent = "提交中…";
+
+          try {
+            if (params.callbackUrl) {
+              const response = await fetch(params.callbackUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(params.callbackHeaders || {}),
+                },
+                body: JSON.stringify(payload),
+              });
+              if (!response.ok) throw new Error(`提交失败（${response.status}）`);
+            } else {
+              window.dispatchEvent(
+                new CustomEvent("weekly-report-feedback-submit", { detail: payload }),
+              );
+              await new Promise((resolve) => setTimeout(resolve, 240));
+            }
+
+            setSubmitted();
+            elements.submitMessage.textContent = "反馈已提交，感谢您的确认";
+          } catch (error) {
+            elements.submitButton.disabled = false;
+            elements.submitButton.textContent = params.submitButtonText || "提交";
+            elements.submitMessage.classList.add("is-error");
+            elements.submitMessage.textContent = error?.message || "提交失败，请稍后重试";
+          }
+        }
+
+        function initialize() {
+          syncVisualViewport();
+          elements.icon.src = params.iconUrl;
+          elements.icon.alt = `${params.customer || "客户"}图标`;
+          elements.title.textContent = params.title;
+          document.title = params.title;
+          elements.reportLink.href = safeHttpUrl(params.reportUrl);
+          elements.reportLinkText.textContent = params.reportLinkText || "查看完整周报";
+          elements.period.textContent = params.reportPeriod;
+          elements.submitButton.textContent = params.submitButtonText || "提交";
+          elements.submitButton.addEventListener("click", submitFeedback);
+          renderSummary();
+          renderProjects();
+          if (state.submitted) setSubmitted();
+        }
+
+        initialize();
+      })();
+    </script>
+
+    <!--
+      数据契约变更历史
+      2026-08-27 / schemaVersion 1：将可替换数据从 JavaScript 对象字面量迁移为单一严格 JSON 数据块。
+      变更原因：便于 Agent 只替换 JSON 完成 HTML 生成，同时保留 projects 等嵌套结构的类型校验，避免字符串化 JSON 绕过校验。
+    -->
+  </body>
+</html>

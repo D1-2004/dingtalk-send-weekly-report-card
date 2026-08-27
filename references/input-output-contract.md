@@ -78,7 +78,7 @@ dws doc read --node "$REPORT_URL"
 不要让模型直接构造 `cardData.cardParamMap`。使用构造器：
 
 ```bash
-python3 scripts/build_card_payload.py weekly-card-input.json \
+python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
   --output card-request.json
 ```
 
@@ -120,6 +120,10 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 
 ## 产物及获取
 
+### 独立 HTML 产物
+
+用户要求单 HTML 卡片时，按照 `html-generator-contract.md` 生成 `WeeklyReportCardData`，把提交地址作为独立 `--submit-url` 参数传给 `weekly_report_tool.py gen-card`。命令输出的绝对路径就是最终产物；不要继续构造或发送 DWS 请求。
+
 ### 业务产物
 
 `weekly-card-input.json` 是从周报提取的可读业务对象，适合审阅、修改和审计。
@@ -130,7 +134,7 @@ python3 scripts/build_card_payload.py weekly-card-input.json \
 
 ```bash
 source ~/.zshrc
-python3 scripts/validate_card_payload.py card-request.json
+python3 scripts/weekly_report_tool.py validate-card card-request.json
 ```
 
 ### 投递产物
@@ -149,6 +153,8 @@ DWS 返回的 `result.outTrackId` 是本次卡片实例的主要追踪标识。�
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v8 | 构造和校验改为 `weekly_report_tool.py build-card` 与 `validate-card` 子命令 | 统一技能包命令入口，避免 Agent 在多个脚本之间选择错误或跳过校验 |
+| 2026-08-27 | v7 | 增加独立 HTML 产物分支，并把提交地址从展示数据中分离为 `--submit-url` | 让生成过程由单命令完成，同时避免模型生成或遗留错误的回调地址；DWS 分支保持不变 |
 | 2026-08-27 | v6 | 恢复紧凑动态 `projectRows`，增加交互草稿回调与最终统一提交的分层协议 | 降低项目区域高度，并以服务端私有草稿保证各项目状态独立可靠 |
 | 2026-08-27 | v5 | 业务图标字段改为 `iconUrl`，传输层恢复动态 `feedbackForm` 并增加 `reasons_N` | 与已保存的原生 Form 模板变量保持一致，并保留快捷不满意原因 |
 | 2026-08-26 | v3 | 用动态 `projectRows` 取代固定编号表单字段，项目数不再限制为 2 | 让模板按实际项目数量循环渲染并保持结构化校验 |

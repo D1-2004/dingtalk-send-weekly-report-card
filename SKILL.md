@@ -1,25 +1,52 @@
 ---
 name: dingtalk-send-weekly-report-card
-description: 当用户向 Agent 提供钉钉/阿里云文档周报链接，并希望生成、校验和发送客户满意度回访互动卡片时使用。读取周报及用户补充描述，提取客户、项目、周期和简报，构造 DingTalk createAndDeliver 请求，校验后通过显式 AppKey/AppSecret 参数调用 DWS API，将卡片发送给当前消息发起人，并返回可核验的投递结果。不要用于普通文档摘要、非互动卡片消息或缺少明确接收人的批量发送。
+description: Use when 用户提供钉钉或阿里云文档周报链接，并要求生成可托管的单 HTML 客户回访页，或构造、校验、发送钉钉满意度互动卡片；尤其适用于动态项目列表、独立满意度反馈和明确接收人的场景。
 ---
 
 # 钉钉周报回访卡片
 
-把用户提供的周报转换为客户满意度回访卡片，并投递给当前消息发起人。产出包括规范化卡片请求 JSON、DWS 投递回执和面向用户的发送确认。
+把用户提供的周报转换为客户满意度回访卡片。根据用户要求，产出可以是一个已绑定提交地址的独立 HTML 文件，也可以是钉钉互动卡片请求和 DWS 投递回执。
 
 ## 必须读取的资源
 
 在构造请求前读取：
 
 - `references/input-output-contract.md`：周报信息提取、字段映射与产物获取规则。
+- `references/html-generator-contract.md`：独立 HTML 卡片的数据接口、提交地址和单命令生成规则；仅 HTML 模式必读。
 - `references/create-and-deliver-schema.md`：DWS API 参数和响应判定。
 - `assets/weekly-card-input.schema.json`：Agent 生成的未序列化业务对象约束。
 - `assets/create-and-deliver.schema.json`：DWS 外层传输请求约束。
 - `assets/project-rows.schema.json`：字符串化 `projectRows` 反序列化后的动态项目结构约束。
+- `assets/weekly-report-card-data.schema.json`：独立 HTML 卡片外部参数约束。
 
 使用 `assets/weekly-card-input.example.json` 作为输入样例，使用 `assets/card-request.example.json` 核对构造结果。不要直接发送样例中的接收人或 `outTrackId`。
 
+HTML 模式使用 `assets/weekly-feedback-html-data.example.json` 核对 `--data`，并使用内置 `assets/weekly-feedback-template.html`；不要直接编辑模板结构。
+
+技能包只暴露 `scripts/weekly_report_tool.py` 这一个命令工具。HTML 生成、钉钉请求构造和请求校验分别使用它的 `gen-card`、`build-card`、`validate-card` 子命令；不要直接调用其他脚本。
+
 ## 工作流
+
+### 0. 选择产物模式
+
+- 用户要求“HTML”“单文件”“可托管页面”或给出 HTML 输出路径时，使用 HTML 模式。只生成文件，不调用 DWS。
+- 用户明确要求在钉钉中发送互动卡片时，继续执行下方 DWS 模式。
+
+HTML 模式中，把周报和用户描述整理成 `WeeklyReportCardData`，然后只执行一条命令：
+
+```bash
+python3 scripts/weekly_report_tool.py gen-card \
+  --format html \
+  --data "$CARD_DATA_JSON" \
+  --submit-url "$SUBMIT_URL" \
+  --output "$OUTPUT_PATH"
+```
+
+这一条命令封装严格 JSON 解析、提交 URL 校验与注入、模板数据替换、`</script>` 安全转义、父目录创建和文件写入。成功后直接把命令输出的绝对文件路径作为产物；不要再用脚本或文本替换工具二次编辑生成文件。
+
+`--submit-url` 必须由调用方单独提供，并且必须是绝对 HTTP 或 HTTPS URL。它是卡片最终 `callbackUrl` 的唯一权威来源；即使 `--data` 中残留了旧 `callbackUrl`，命令也必须覆盖。`--output` 接受相对路径、绝对路径和 `~` 路径。
+
+HTML 模式完成后停止，不执行第 3～6 步的 DWS 构造、认证或发送。
 
 ### 1. 确认输入与接收人
 
@@ -50,7 +77,7 @@ dws doc read --node "$REPORT_URL"
 不要让模型直接拼接字符串化的 `projectRows`。先生成未序列化的业务对象，再调用确定性构造器：
 
 ```bash
-python3 scripts/build_card_payload.py weekly-card-input.json \
+python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
   --output card-request.json
 ```
 
@@ -83,7 +110,7 @@ if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
   printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
   exit 1
 fi
-python3 scripts/validate_card_payload.py card-request.json
+python3 scripts/weekly_report_tool.py validate-card card-request.json
 ```
 
 构造器和校验器依赖 `jsonschema>=4.18,<5`，版本声明位于 `scripts/requirements.txt`。依赖缺失时停止并提示安装，不得跳过 Schema 校验。
@@ -98,7 +125,7 @@ python3 scripts/validate_card_payload.py card-request.json
 
 ```bash
 source ~/.zshrc
-python3 scripts/validate_card_payload.py card-request.json
+python3 scripts/weekly_report_tool.py validate-card card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
   --client-id "$DDWS_CLIENT_ID" \
   --client-secret "$DDWS_CLIENT_SECRET" \
@@ -128,7 +155,9 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 ## 产物与获取方式
 
-本技能产生四类产物：
+HTML 模式产生一个独立 HTML 文件。命令成功时在标准输出打印其绝对路径；文件内已包含渲染数据和 `callbackUrl`，可直接打开、托管或交付。
+
+DWS 模式产生四类产物：
 
 1. `weekly-card-input.json`：从周报提取的、未序列化的业务对象。
 2. `card-request.json`：构造器生成并通过结构校验的最终 DWS 请求。
@@ -139,6 +168,11 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 ## 注意事项
 
+- HTML 模式必须通过 `--submit-url` 传入提交地址，不要把地址硬编码进模板，也不要让模型把它混入展示数据。
+- HTML 中的 `callbackHeaders` 对文件接收者可见，只能包含非敏感值；禁止写入令牌、密钥或长期凭证。
+- HTML 模式只执行 `weekly_report_tool.py gen-card`；不要调用 DWS，也不要设置或修改 `callbackRouteKey`。
+- HTML 生成成功后，不要再分步替换 JSON、提交地址或输出文件。
+- 只把 `scripts/weekly_report_tool.py` 作为命令入口；不要引用或恢复独立构造器、校验器入口。
 - 先 `source ~/.zshrc`，再显式传入两个 DWS 凭证参数。
 - 不把 DWS 用户 OAuth 登录态误认为应用身份；创建卡片使用应用 AppKey/AppSecret。
 - 不在获取不到正文时虚构客户、项目、数据或周期。
@@ -156,6 +190,8 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v9 | 将 HTML 生成、DWS 请求构造和 DWS 请求校验合并到 `weekly_report_tool.py` 的三个子命令，并增加 HTML 数据 Schema | 对 Agent 只暴露一个稳定命令入口，同时保留对字符串化 `projectRows` 的深层校验，减少调用分支和漏校验风险 |
+| 2026-08-27 | v8 | 增加独立 HTML 模式，把 JSON 解析、提交地址注入、模板替换和文件输出封装进 `weekly_report_tool.py gen-card` | 避免 Agent 分步操作造成转义错误、提交地址遗漏或输出路径处理不一致；本次不改变 DWS 协议 |
 | 2026-08-27 | v7 | 从原生 `feedbackForm` 切回紧凑循环布局；交互项按项目回调更新用户私有草稿，最终按钮统一写表并更新共享禁用态 | 缩短每个项目的展示高度，同时避免旧循环版满意度串值和动态本地对象无法可靠汇总的问题 |
 | 2026-08-27 | v6 | 改用动态原生 `feedbackForm`，图标变量统一为 `iconUrl`，增加快捷不满意原因并改为共享提交状态 | 修复循环交互状态串行、选项文案缺失和提交后仅个人禁用的问题，并与已保存模板协议对齐 |
 | 2026-08-26 | v5 | 增加共享 `formDisabled` 状态，并明确动态项目数组不设固定数量上限 | 提交成功后统一禁用所有动态行，且按周报实际项目数渲染 |

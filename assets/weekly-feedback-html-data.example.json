@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "iconUrl": "https://img.alicdn.com/example.png",
+  "title": "维信诺项目周报回访",
+  "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+  "reportLinkText": "查看完整周报",
+  "summaryMarkdown": [
+    "本周新增需求 **11** 项，其中 **2** 项已完成",
+    "当前 **6** 个工单处理中，**2** 个已关闭"
+  ],
+  "projects": [
+    {
+      "id": "p1",
+      "name": "智能助理项目",
+      "satisfaction": "",
+      "reasons": [],
+      "feedback": ""
+    },
+    {
+      "id": "p2",
+      "name": "数据看板项目",
+      "satisfaction": "",
+      "reasons": [],
+      "feedback": ""
+    }
+  ],
+  "dissatisfactionOptions": [
+    "响应不及时",
+    "问题未解决",
+    "交付质量不佳",
+    "沟通体验不佳",
+    "需求理解偏差",
+    "其他"
+  ],
+  "submitButtonText": "提交",
+  "submittedButtonText": "已提交",
+  "reportPeriod": "2026年3月31日—2026年4月10日",
+  "customer": "维信诺",
+  "week": "2026-W15",
+  "collector": "辰驷",
+  "reportTime": "2026-08-27 10:00:00",
+  "submissionId": "wf-1787690400000-a1b2",
+  "callbackHeaders": {},
+  "formDisabled": false
+}

@@ -40,14 +40,14 @@ POST /v1.0/card/instances/createAndDeliver
 先把业务对象确定性转换成传输请求，再从用户终端配置加载凭证，并把凭证作为命令行参数显式传给 DWS：
 
 ```bash
-python3 scripts/build_card_payload.py weekly-card-input.json \
+python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
   --output card-request.json
 source ~/.zshrc
 if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
   printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
   exit 1
 fi
-python3 scripts/validate_card_payload.py card-request.json
+python3 scripts/weekly_report_tool.py validate-card card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
   --client-id "$DDWS_CLIENT_ID" \
   --client-secret "$DDWS_CLIENT_SECRET" \
@@ -95,6 +95,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v8 | DWS 请求构造与校验改为统一工具的 `build-card`、`validate-card` 子命令 | 对技能调用方只保留一个命令入口，同时继续执行分层 Schema、跨字段和凭证存在性校验 |
 | 2026-08-27 | v7 | 传输变量恢复为结构化 `projectRows`；增加“私有草稿更新”和“最终写表提交”两类回调语义 | 紧凑循环布局需要逐项服务端同步才能保证项目状态独立，同时保持 AI 表格只写一次 |
 | 2026-08-27 | v6 | 传输协议改为动态原生 `feedbackForm`，移除错误的单值 1024 字节自限，并把共享提交状态收口到回调 `cardData` | 支持 3–5 个及更多项目的独立表单字段，同时确保一次提交后整张卡片不可再次提交 |
 | 2026-08-26 | v4 | 传输协议由固定 `feedbackForm` 改为动态 `projectRows`，增加项目行内部 Schema | 支持任意实际项目数并防止字符串化数组绕过结构校验 |

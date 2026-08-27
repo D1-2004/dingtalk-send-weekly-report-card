@@ -10,8 +10,7 @@ from pathlib import Path
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
-VALIDATOR = SKILL_DIR / "scripts" / "validate_card_payload.py"
-BUILDER = SKILL_DIR / "scripts" / "build_card_payload.py"
+TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
 EXAMPLE = SKILL_DIR / "assets" / "card-request.example.json"
 
 
@@ -29,7 +28,13 @@ def load_new_protocol_example() -> dict:
 
 def run_validator(payload: dict) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), "--skip-env-check", "-"],
+        [
+            sys.executable,
+            str(TOOL),
+            "validate-card",
+            "--skip-env-check",
+            "-",
+        ],
         input=json.dumps(payload, ensure_ascii=False),
         text=True,
         capture_output=True,
@@ -41,7 +46,7 @@ def run_validator_with_env(
     payload: dict, environment: dict[str, str]
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), "-"],
+        [sys.executable, str(TOOL), "validate-card", "-"],
         input=json.dumps(payload, ensure_ascii=False),
         text=True,
         capture_output=True,
@@ -139,7 +144,7 @@ class CardPayloadBuilderTests(unittest.TestCase):
                 json.dumps(semantic_input, ensure_ascii=False), encoding="utf-8"
             )
             result = subprocess.run(
-                [sys.executable, str(BUILDER), str(input_path)],
+                [sys.executable, str(TOOL), "build-card", str(input_path)],
                 text=True,
                 capture_output=True,
                 check=False,
@@ -176,7 +181,7 @@ class CardPayloadBuilderTests(unittest.TestCase):
                 json.dumps(semantic_input, ensure_ascii=False), encoding="utf-8"
             )
             result = subprocess.run(
-                [sys.executable, str(BUILDER), str(input_path)],
+                [sys.executable, str(TOOL), "build-card", str(input_path)],
                 text=True,
                 capture_output=True,
                 check=False,
@@ -221,6 +226,109 @@ class CardPayloadBuilderTests(unittest.TestCase):
         self.assertEqual(rows[-1]["name"], "工单自动化")
         validation = run_validator(payload)
         self.assertEqual(validation.returncode, 0, validation.stdout)
+
+
+class WeeklyReportToolTests(unittest.TestCase):
+    @staticmethod
+    def html_data() -> dict:
+        return {
+            "schemaVersion": 1,
+            "iconUrl": "https://img.alicdn.com/example.png",
+            "title": "维信诺项目回访",
+            "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+            "summaryMarkdown": ["本周新增需求 **11** 项"],
+            "projects": [
+                {
+                    "id": "p1",
+                    "name": "智能助理项目",
+                    "satisfaction": "",
+                    "reasons": [],
+                    "feedback": "",
+                }
+            ],
+            "dissatisfactionOptions": ["响应不及时", "其他"],
+            "reportPeriod": "2026年3月31日—2026年4月10日",
+            "customer": "维信诺",
+            "week": "2026-W15",
+            "collector": "辰驷",
+            "reportTime": "2026-08-26 10:00:00",
+            "submissionId": "wf-1787690400000-a1b2",
+        }
+
+    def test_skill_docs_expose_only_the_unified_command_tool(self) -> None:
+        documentation = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in [
+                SKILL_DIR / "SKILL.md",
+                SKILL_DIR / "references" / "input-output-contract.md",
+                SKILL_DIR / "references" / "create-and-deliver-schema.md",
+                SKILL_DIR / "references" / "html-generator-contract.md",
+            ]
+        )
+
+        self.assertNotIn("scripts/build_card_payload.py", documentation)
+        self.assertNotIn("scripts/validate_card_payload.py", documentation)
+        self.assertIn("weekly_report_tool.py build-card", documentation)
+        self.assertIn("weekly_report_tool.py validate-card", documentation)
+
+    def test_gen_card_injects_submit_url_in_one_command(self) -> None:
+        html_data = self.html_data()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "feedback.html"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "gen-card",
+                    "--format",
+                    "html",
+                    "--data",
+                    json.dumps(html_data, ensure_ascii=False),
+                    "--submit-url",
+                    "https://weekly-feedback.up.railway.app/submit",
+                    "--output",
+                    str(output),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated = output.read_text(encoding="utf-8")
+            self.assertIn(
+                '"callbackUrl": "https://weekly-feedback.up.railway.app/submit"',
+                generated,
+            )
+
+    def test_gen_card_rejects_missing_external_parameter(self) -> None:
+        html_data = self.html_data()
+        del html_data["iconUrl"]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "feedback.html"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "gen-card",
+                    "--format",
+                    "html",
+                    "--data",
+                    json.dumps(html_data, ensure_ascii=False),
+                    "--submit-url",
+                    "https://weekly-feedback.up.railway.app/submit",
+                    "--output",
+                    str(output),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("$.iconUrl", result.stderr)
+            self.assertFalse(output.exists())
+
 
 
 if __name__ == "__main__":

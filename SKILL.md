@@ -14,7 +14,7 @@ scripts/weekly_report_tool.py gen-card
 ```
 
 - `--type html`：校验数据、注入提交地址并生成单 HTML 文件。
-- `--type card`：校验最终钉钉卡片 JSON，校验通过后由命令内部调用 DWS 发送卡片并返回投递结果。
+- `--type card`：校验钉钉卡片业务 JSON，补齐固定回调路由后由命令内部调用 DWS 发送卡片并返回投递结果。
 
 Agent 不自行检查环境变量、不拼接额外 Shell 校验，也不直接调用 DWS。命令成功才能向用户报告产物已生成或卡片已发送。
 
@@ -77,7 +77,7 @@ Agent 不自行检查环境变量、不拼接额外 Shell 校验，也不直接�
 
 - `cardTemplateId` 使用已发布的模板 ID。
 - `outTrackId` 每次发送生成新值；`submissionId` 必须与其一致。
-- `callbackType` 为 `HTTP`，`callbackRouteKey` 使用已配置的回调路由。
+- 不要生成 `callbackType` 或 `callbackRouteKey`。命令固定使用已注册的 HTTP 回调路由 `customer_feedback_aitable_v1`，Agent 不能传入或覆盖。
 - `openSpaceId` 为 `dtv1.card//IM_ROBOT.<接收人userId>`。
 - `cardData.cardParamMap` 的所有值必须是字符串。
 - `title`、`iconUrl`、`reportUrl`、摘要、周期、客户、周次、收集人和时间来自上表。
@@ -116,3 +116,7 @@ python3 scripts/weekly_report_tool.py gen-card \
 > 卡片已发送，请在钉钉中查收。
 
 任一步失败时直接报告命令的安全错误摘要，不声称已生成或已发送，也不要绕过校验后重试。
+
+## 协议变更记录
+
+- 2026-08-27：从 Agent 输入中移除 `callbackType`、`callbackRouteKey`，改由命令固定注入已注册路由，避免调用方覆盖卡片回调目标。

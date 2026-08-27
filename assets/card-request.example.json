@@ -1,8 +1,6 @@
 {
   "cardTemplateId": "3ff383e6-adfa-4117-a10f-6691f6eec086.schema",
   "outTrackId": "wf-1787690400000-a1b2",
-  "callbackType": "HTTP",
-  "callbackRouteKey": "customer_feedback_aitable_v1",
   "openSpaceId": "dtv1.card//IM_ROBOT.323179",
   "cardData": {
     "cardParamMap": {

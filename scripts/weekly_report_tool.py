@@ -27,6 +27,8 @@ DATA_BLOCK_END = "</script>"
 MAX_PARAM_KEY_BYTES = 100
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 DWS_CARD_ENDPOINT = "/v1.0/card/instances/createAndDeliver"
+FIXED_CALLBACK_TYPE = "HTTP"
+FIXED_CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",
@@ -402,6 +404,11 @@ def validate_delivery_response(
 def gen_ding_card(
     data: dict[str, Any], credentials: dict[str, str]
 ) -> dict[str, Any]:
+    request_payload = {
+        **data,
+        "callbackType": FIXED_CALLBACK_TYPE,
+        "callbackRouteKey": FIXED_CALLBACK_ROUTE_KEY,
+    }
     try:
         completed = subprocess.run(
             [
@@ -417,7 +424,7 @@ def gen_ding_card(
                 "--data",
                 "-",
             ],
-            input=json.dumps(data, ensure_ascii=False),
+            input=json.dumps(request_payload, ensure_ascii=False),
             text=True,
             capture_output=True,
             check=False,

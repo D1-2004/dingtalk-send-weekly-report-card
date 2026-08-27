@@ -299,6 +299,39 @@ class DingCardDeliveryTests(unittest.TestCase):
         self.assertIn("card data failed validation", result.stderr)
         self.assertFalse(record.exists())
 
+    def test_card_injects_fixed_callback_route_before_invoking_dws(self) -> None:
+        payload = card_payload()
+        payload.pop("callbackType", None)
+        payload.pop("callbackRouteKey", None)
+        response = success_response(payload)
+
+        result, record_path = self.run_with_fake_dws(payload, response=response)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        delivered_payload = json.loads(record["stdin"])
+        self.assertEqual(delivered_payload["callbackType"], "HTTP")
+        self.assertEqual(
+            delivered_payload["callbackRouteKey"],
+            "customer_feedback_aitable_v1",
+        )
+        self.assertNotIn("callbackType", payload)
+        self.assertNotIn("callbackRouteKey", payload)
+
+    def test_card_rejects_external_callback_configuration(self) -> None:
+        payload = card_payload()
+        payload["callbackType"] = "HTTP"
+        payload["callbackRouteKey"] = "customer_feedback_aitable_v1"
+
+        result, record = self.run_with_fake_dws(
+            payload,
+            response=success_response(payload),
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("card data failed validation", result.stderr)
+        self.assertFalse(record.exists())
+
     def test_card_deep_validates_project_rows_before_invoking_dws(self) -> None:
         payload = card_payload()
         rows = json.loads(payload["cardData"]["cardParamMap"]["projectRows"])
@@ -340,7 +373,12 @@ class DingCardDeliveryTests(unittest.TestCase):
                 "-",
             ],
         )
-        self.assertEqual(json.loads(record["stdin"]), payload)
+        expected_request = {
+            **payload,
+            "callbackType": "HTTP",
+            "callbackRouteKey": "customer_feedback_aitable_v1",
+        }
+        self.assertEqual(json.loads(record["stdin"]), expected_request)
         self.assertEqual(command_result["success"], True)
         self.assertEqual(command_result["type"], "card")
         self.assertEqual(command_result["outTrackId"], payload["outTrackId"])

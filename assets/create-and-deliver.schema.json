@@ -6,8 +6,6 @@
   "required": [
     "cardTemplateId",
     "outTrackId",
-    "callbackType",
-    "callbackRouteKey",
     "openSpaceId",
     "cardData",
     "imRobotOpenSpaceModel",
@@ -23,12 +21,6 @@
       "minLength": 1,
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9._:-]+$"
-    },
-    "callbackType": {
-      "const": "HTTP"
-    },
-    "callbackRouteKey": {
-      "const": "customer_feedback_aitable_v1"
     },
     "openSpaceId": {
       "type": "string",

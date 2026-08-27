@@ -1,4 +1,4 @@
 interface:
   display_name: "钉钉周报回访卡片"
   short_description: "读取周报并生成单 HTML 或发送钉钉客户回访卡片"
-  default_prompt: "使用 $dingtalk-send-weekly-report-card 读取这份周报，通过 weekly_report_tool.py gen-card --type html 或 --type card 完成校验与生成；HTML 提交地址从 WEEKLY_FEEDBACK_SUBMIT_URL 读取，需要钉钉互动卡片时再按 DWS 流程发送。"
+  default_prompt: "使用 $dingtalk-send-weekly-report-card 读取这份周报，构造符合 Schema 的最终数据并调用 weekly_report_tool.py gen-card；命令会生成 HTML，或校验并发送钉钉卡片。"

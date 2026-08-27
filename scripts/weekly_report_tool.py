@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,25 +24,9 @@ ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 DEFAULT_TEMPLATE = ASSET_DIR / "weekly-feedback-template.html"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyReportCardData">'
 DATA_BLOCK_END = "</script>"
-CARD_TEMPLATE_ID = "3ff383e6-adfa-4117-a10f-6691f6eec086.schema"
-CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
 MAX_PARAM_KEY_BYTES = 100
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
-SATISFACTION_OPTIONS = [
-    {"value": "满意", "text": "满意", "checked": False},
-    {"value": "不满意", "text": "不满意", "checked": False},
-]
-REASON_OPTIONS = [
-    {"value": value, "text": {"zh_CN": value}}
-    for value in (
-        "响应不及时",
-        "问题未解决",
-        "交付质量不佳",
-        "沟通体验不佳",
-        "需求理解偏差",
-        "其他",
-    )
-]
+DWS_CARD_ENDPOINT = "/v1.0/card/instances/createAndDeliver"
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",
@@ -179,15 +164,6 @@ def validate_html_card_data(data: dict[str, Any]) -> None:
         )
 
 
-def validate_ding_card_data(data: dict[str, Any]) -> None:
-    try:
-        errors = schema_errors(data, "weekly-card-input.schema.json", "input")
-    except (OSError, ValueError, RuntimeError) as error:
-        raise ToolError(f"cannot load DingTalk card input schema: {error}") from error
-    if errors:
-        raise ToolError("card data failed schema validation: " + "; ".join(errors))
-
-
 def replace_data_block(template: str, data: dict[str, Any]) -> str:
     start_tag_index = template.find(DATA_BLOCK_START)
     if start_tag_index < 0:
@@ -239,61 +215,6 @@ def gen_html_card(
         "type": "html",
         "output": str(output_path.resolve()),
         "submitUrl": submit_url,
-    }
-
-
-def compact_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def build_project_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": f"p{index}",
-            "name": project["name"],
-            "satisfaction": "",
-            "satisfactionOptions": [
-                {"projectId": f"p{index}", **option}
-                for option in SATISFACTION_OPTIONS
-            ],
-            "reasonOptions": [dict(option) for option in REASON_OPTIONS],
-            "selectedReasonIndexes": [],
-            "feedback": "",
-        }
-        for index, project in enumerate(data["projects"], start=1)
-    ]
-
-
-def build_payload(data: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "cardTemplateId": CARD_TEMPLATE_ID,
-        "outTrackId": data["outTrackId"],
-        "callbackType": "HTTP",
-        "callbackRouteKey": CALLBACK_ROUTE_KEY,
-        "openSpaceId": f'dtv1.card//IM_ROBOT.{data["recipientUserId"]}',
-        "cardData": {
-            "cardParamMap": {
-                "title": data["title"],
-                "iconUrl": data["iconUrl"],
-                "reportUrl": data["reportUrl"],
-                "summaryMarkdown": data["summaryMarkdown"],
-                "weeklySummary": data["summaryMarkdown"],
-                "feedbackGuide": data["feedbackGuide"],
-                "reportPeriod": data["reportPeriod"],
-                "customer": data["customer"],
-                "week": data["week"],
-                "collector": data["collector"],
-                "reportTime": data["reportTime"],
-                "submissionId": data["outTrackId"],
-                "projectRows": compact_json(build_project_rows(data)),
-                "submitButtonText": "提交",
-                "formState": "normal",
-                "formDisabled": "false",
-            }
-        },
-        "imRobotOpenSpaceModel": {"supportForward": True},
-        "imRobotOpenDeliverModel": {"spaceType": "IM_ROBOT"},
-        "userIdType": 1,
     }
 
 
@@ -381,14 +302,10 @@ def validate_card_param_sizes(card_params: Any, errors: list[str]) -> None:
             )
 
 
-def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
+def validate_payload(payload: Any) -> tuple[list[str], int]:
     require_jsonschema()
     errors: list[str] = []
     project_count = 0
-    if check_env:
-        for name in ("DDWS_CLIENT_ID", "DDWS_CLIENT_SECRET"):
-            if not os.environ.get(name):
-                errors.append(f"missing environment variable: {name}")
     errors.extend(schema_errors(payload, "create-and-deliver.schema.json", "request"))
     if not isinstance(payload, dict):
         return errors, project_count
@@ -417,65 +334,120 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
 
 def validate_generation_parameters(
     args: argparse.Namespace,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], str | None, dict[str, str] | None]:
     if args.type == "card" and args.template is not None:
         raise ToolError("--template is only valid with --type html")
+    if args.type == "card" and args.output is not None:
+        raise ToolError("--output is only valid with --type html")
+    if args.type == "html" and args.output is None:
+        raise ToolError("--output is required with --type html")
 
     data = parse_inline_data(args.data)
-    submit_url = require_submit_url()
     if args.type == "html":
+        submit_url = require_submit_url()
         data["callbackUrl"] = submit_url
         validate_html_card_data(data)
-    else:
-        missing = [
-            name
-            for name in ("DDWS_CLIENT_ID", "DDWS_CLIENT_SECRET")
-            if not os.environ.get(name)
-        ]
-        if missing:
-            raise ToolError(
-                "missing environment variables: " + ", ".join(missing)
-            )
-        validate_ding_card_data(data)
-    return data, submit_url
+        return data, submit_url, None
+
+    missing = [
+        name
+        for name in ("DDWS_CLIENT_ID", "DDWS_CLIENT_SECRET")
+        if not os.environ.get(name)
+    ]
+    if missing:
+        raise ToolError("missing environment variables: " + ", ".join(missing))
+    try:
+        errors, _ = validate_payload(data)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ToolError(f"cannot validate DingTalk card data: {error}") from error
+    if errors:
+        raise ToolError("card data failed validation: " + "; ".join(errors))
+    credentials = {
+        "client_id": os.environ["DDWS_CLIENT_ID"],
+        "client_secret": os.environ["DDWS_CLIENT_SECRET"],
+    }
+    return data, None, credentials
+
+
+def parse_dws_response(stdout: str) -> dict[str, Any]:
+    try:
+        response = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        raise ToolError("DWS returned invalid JSON") from error
+    if not isinstance(response, dict):
+        raise ToolError("DWS returned invalid JSON object")
+    return response
+
+
+def validate_delivery_response(
+    response: dict[str, Any], expected_out_track_id: str
+) -> None:
+    if response.get("success") is not True:
+        raise ToolError("DWS returned success=false")
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise ToolError("DWS response is missing result")
+    if result.get("outTrackId") != expected_out_track_id:
+        raise ToolError("DWS result outTrackId does not match request")
+    deliver_results = result.get("deliverResults")
+    if not isinstance(deliver_results, list) or not deliver_results:
+        raise ToolError("DWS result deliverResults must be non-empty")
+    if any(
+        not isinstance(item, dict) or item.get("success") is not True
+        for item in deliver_results
+    ):
+        raise ToolError("DWS returned a failed delivery result")
 
 
 def gen_ding_card(
-    args: argparse.Namespace, data: dict[str, Any], submit_url: str
+    data: dict[str, Any], credentials: dict[str, str]
 ) -> dict[str, Any]:
     try:
-        payload = build_payload(data)
-        payload_errors, project_count = validate_payload(payload, check_env=False)
-    except (OSError, json.JSONDecodeError, RuntimeError) as error:
-        raise ToolError(f"cannot generate DingTalk card: {error}") from error
-    if payload_errors:
-        raise ToolError(
-            "generated DingTalk card failed validation: "
-            + "; ".join(payload_errors)
+        completed = subprocess.run(
+            [
+                "dws",
+                "api",
+                "POST",
+                DWS_CARD_ENDPOINT,
+                "--client-id",
+                credentials["client_id"],
+                "--client-secret",
+                credentials["client_secret"],
+                "--yes",
+                "--data",
+                "-",
+            ],
+            input=json.dumps(data, ensure_ascii=False),
+            text=True,
+            capture_output=True,
+            check=False,
         )
+    except FileNotFoundError as error:
+        raise ToolError("dws command not found") from error
+    except OSError as error:
+        raise ToolError("cannot execute dws command") from error
+    if completed.returncode != 0:
+        raise ToolError(f"DWS command failed with exit code {completed.returncode}")
 
-    output_path = write_output(
-        args.output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    )
+    response = parse_dws_response(completed.stdout)
+    validate_delivery_response(response, data["outTrackId"])
+    _, project_count = validate_payload(data)
     return {
         "success": True,
         "type": "card",
-        "output": str(output_path.resolve()),
-        "submitUrl": submit_url,
-        "warning": (
-            f"当前命令指定的数据提交地址是{submit_url}，"
-            "需核对ding-card实际提交地址"
-        ),
-        "outTrackId": payload["outTrackId"],
-        "recipientSpace": payload["openSpaceId"],
+        "outTrackId": data["outTrackId"],
+        "recipientSpace": data["openSpaceId"],
         "projectCount": project_count,
+        "dwsResponse": response,
     }
 
 
 def generate_card(args: argparse.Namespace) -> int:
-    data, submit_url = validate_generation_parameters(args)
-    generator = gen_html_card if args.type == "html" else gen_ding_card
-    result = generator(args, data, submit_url)
+    data, submit_url, credentials = validate_generation_parameters(args)
+    if args.type == "html":
+        result = gen_html_card(args, data, submit_url or "")
+    else:
+        result = gen_ding_card(data, credentials or {})
     print(json.dumps(result, ensure_ascii=False))
     return 0
 
@@ -497,7 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate.add_argument("--data", required=True, help="Strict JSON object.")
     generate.add_argument(
-        "--output", required=True, help="Output file path; relative and absolute work."
+        "--output", help="HTML output file path; valid only with --type html."
     )
     generate.set_defaults(handler=generate_card)
     return parser

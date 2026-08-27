@@ -162,6 +162,23 @@ class UnifiedGenerationCommandTests(unittest.TestCase):
         self.assertIn("gen-card --type card", documentation)
         self.assertIn(SUBMIT_URL_ENV, documentation)
 
+    def test_skill_delegates_environment_validation_to_the_command(self) -> None:
+        documentation = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in [
+                SKILL_DIR / "SKILL.md",
+                SKILL_DIR / "references" / "input-output-contract.md",
+                SKILL_DIR / "references" / "create-and-deliver-schema.md",
+                SKILL_DIR / "references" / "html-generator-contract.md",
+            ]
+        )
+
+        self.assertNotIn("source ~/.zshrc", documentation)
+        self.assertNotIn("if [[", documentation)
+        self.assertNotIn("printf '错误：缺少", documentation)
+        self.assertIn("Agent 不得自行检查环境变量", documentation)
+        self.assertIn("环境变量缺失时由命令报错并停止", documentation)
+
     def test_html_reads_submit_url_from_environment_and_returns_result(self) -> None:
         submit_url = "https://weekly-feedback.example.com/html-submit"
         with tempfile.TemporaryDirectory() as temp_dir:

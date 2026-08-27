@@ -78,7 +78,6 @@ dws doc read --node "$REPORT_URL"
 不要让模型直接构造 `cardData.cardParamMap`。使用构造器：
 
 ```bash
-source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card --type card \
   --data "$CARD_DATA_JSON" \
   --output card-request.json
@@ -92,6 +91,8 @@ python3 scripts/weekly_report_tool.py gen-card --type card \
 4. 用内部 Schema 校验反序列化结果。
 5. 用外层 Schema 校验最终 DWS 请求。
 6. 检查项目 ID、选项归属、满意度状态、敏感字段和参数 key 的 UTF-8 字节上限。
+
+Agent 只生成 `CARD_DATA_JSON` 并调用上述命令，不自行读取或校验环境变量。凭证与提交地址缺失时，由命令返回错误且不创建输出文件。
 
 ## 卡片变量映射
 
@@ -135,7 +136,6 @@ python3 scripts/weekly_report_tool.py gen-card --type card \
 `card-request.json` 是 `gen-card --type card` 完成参数校验、构造和深层校验后输出的 DWS 请求。生成命令的结果会返回 `submitUrl` 和核对 ding-card 实际提交地址的提示。
 
 ```bash
-source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card --type card \
   --data "$CARD_DATA_JSON" \
   --output card-request.json
@@ -157,6 +157,7 @@ DWS 返回的 `result.outTrackId` 是本次卡片实例的主要追踪标识。�
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v10 | 删除 Agent 侧环境变量读取和校验步骤，改为直接调用统一生成命令 | 保证参数与环境校验只有 CLI 一个权威实现，Agent 只负责业务 JSON |
 | 2026-08-27 | v9 | HTML 与钉钉卡片统一使用 `gen-card --type`，提交地址从 `WEEKLY_FEEDBACK_SUBMIT_URL` 读取 | 将参数校验、分支生成和结果返回收口到同一命令，并明确 card 只提示核对而不嵌入该地址 |
 | 2026-08-27 | v8 | 构造和校验合并到统一工具入口 | 避免 Agent 在多个入口之间选择错误或跳过校验 |
 | 2026-08-27 | v7 | 增加独立 HTML 产物分支，并把提交地址从展示数据中分离为环境配置 | 让生成过程由单命令完成，同时避免模型生成或遗留错误的回调地址；DWS 分支保持不变 |

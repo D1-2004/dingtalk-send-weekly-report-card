@@ -37,14 +37,9 @@ POST /v1.0/card/instances/createAndDeliver
 
 ## 调用方式
 
-先把业务对象确定性转换成传输请求，再从用户终端配置加载凭证，并把凭证作为命令行参数显式传给 DWS：
+Agent 先拼接业务对象并直接调用统一命令。`gen-card` 自行校验所需环境变量并确定性生成传输请求；生成成功后，再把运行环境中的凭证作为命令行参数显式传给 DWS：
 
 ```bash
-source ~/.zshrc
-if [[ -z "${WEEKLY_FEEDBACK_SUBMIT_URL:-}" || -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
-  printf '错误：缺少 WEEKLY_FEEDBACK_SUBMIT_URL、DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止生成。\n' >&2
-  exit 1
-fi
 python3 scripts/weekly_report_tool.py gen-card --type card \
   --data "$CARD_DATA_JSON" \
   --output card-request.json
@@ -56,7 +51,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
   < card-request.json
 ```
 
-只允许使用 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 作为显式参数值来源。任一变量缺失或为空时立即报错并停止，禁止调用 DWS API。旧变量 `DWS_CLIENT_ID`、`DWS_CLIENT_SECRET` 不视为有效凭证来源。
+只允许使用 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 作为显式参数值来源。Agent 不在命令外检查这些变量；任一变量缺失或为空时，`gen-card` 立即报错并停止，禁止调用 DWS API。旧变量 `DWS_CLIENT_ID`、`DWS_CLIENT_SECRET` 不视为有效凭证来源。
 
 禁止省略 `--client-id` 和 `--client-secret` 后依赖 DWS 的隐式环境变量注入。禁止把凭证放入 `card-request.json`。
 
@@ -97,6 +92,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v10 | 移除生成前的 Shell 环境变量校验，明确统一命令是唯一校验入口 | 避免 Agent 重复实现认证前置判断，并保证缺少环境配置时不会生成或发送请求 |
 | 2026-08-27 | v9 | DWS 请求统一由 `gen-card --type card` 校验并生成，结果增加预期提交地址核对提示 | 对外只保留一个生成命令，并明确预期地址不会覆盖卡片平台实际回调配置 |
 | 2026-08-27 | v8 | DWS 请求构造与校验合并到统一工具入口 | 对技能调用方只保留一个命令入口，同时继续执行分层 Schema、跨字段和凭证存在性校验 |
 | 2026-08-27 | v7 | 传输变量恢复为结构化 `projectRows`；增加“私有草稿更新”和“最终写表提交”两类回调语义 | 紧凑循环布局需要逐项服务端同步才能保证项目状态独立，同时保持 AI 表格只写一次 |

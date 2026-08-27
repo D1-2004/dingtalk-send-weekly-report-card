@@ -7,7 +7,6 @@
 ## 单命令接口
 
 ```bash
-source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card \
   --type html \
   --data "$CARD_DATA_JSON" \
@@ -37,6 +36,8 @@ python3 scripts/weekly_report_tool.py gen-card \
 | `--template` | 否 | 兼容模板文件；默认使用技能包内置模板 |
 
 运行环境必须提供 `WEEKLY_FEEDBACK_SUBMIT_URL`，其值必须是绝对 `http://` 或 `https://` 地址，并作为最终 `callbackUrl`。
+
+Agent 不读取或预检该环境变量，只拼接 `--data` 和 `--output` 后调用命令。变量缺失或格式错误时由命令报错并停止，不生成目标文件。
 
 ## `--data` 对象
 
@@ -86,6 +87,7 @@ WeeklyReportCardData {
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v4 | 删除 Agent 侧终端配置加载步骤，提交地址存在性和格式完全由生成命令校验 | 让调用方只提供业务参数，避免在技能指令中复制 CLI 的前置校验逻辑 |
 | 2026-08-27 | v3 | 生成入口改为 `gen-card --type html`，提交地址改从环境变量读取，按钮文案固定 | 统一 HTML 与 ding-card 的命令面，并消除调用参数及界面文案漂移 |
 | 2026-08-27 | v2 | 增加 HTML 数据 Draft 2020-12 Schema，并把生成命令纳入统一工具入口 | 确保图标、标题、周期、链接、简报、动态项目、快捷选项和提交地址在生成前都经过结构校验 |
 | 2026-08-27 | v1 | 增加输出路径和 JSON 数据的一体化 HTML 生成命令 | 避免 Agent 分步编辑模板、拼接提交地址和创建文件，减少转义错误与提交到错误端点的风险 |

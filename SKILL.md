@@ -35,7 +35,6 @@ HTML 模式使用 `assets/weekly-feedback-html-data.example.json` 核对 `--data
 HTML 模式中，把周报和用户描述整理成 `WeeklyReportCardData`，然后只执行一条命令：
 
 ```bash
-source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card \
   --type html \
   --data "$CARD_DATA_JSON" \
@@ -77,7 +76,6 @@ dws doc read --node "$REPORT_URL"
 不要让模型直接拼接字符串化的 `projectRows`。先把未序列化业务对象保存为 `CARD_DATA_JSON`，再执行统一命令：
 
 ```bash
-source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card --type card \
   --data "$CARD_DATA_JSON" \
   --output card-request.json
@@ -102,16 +100,11 @@ python3 scripts/weekly_report_tool.py gen-card --type card \
 
 项目数量不在模板里写死：1、3、5 项或其他数量都由 `projects` 的实际长度决定。不要静默截断项目。
 
-### 4. 调用前校验与结果核对
+### 4. 命令内置校验与结果核对
 
-先加载用户终端配置，然后硬性检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`：
+Agent 只需要拼接符合对应 Schema 的 `CARD_DATA_JSON`，然后调用一次 `gen-card`：
 
 ```bash
-source ~/.zshrc
-if [[ -z "${WEEKLY_FEEDBACK_SUBMIT_URL:-}" || -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
-  printf '错误：缺少 WEEKLY_FEEDBACK_SUBMIT_URL、DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止生成。\n' >&2
-  exit 1
-fi
 python3 scripts/weekly_report_tool.py gen-card --type card \
   --data "$CARD_DATA_JSON" \
   --output card-request.json
@@ -119,7 +112,7 @@ python3 scripts/weekly_report_tool.py gen-card --type card \
 
 构造器和校验器依赖 `jsonschema>=4.18,<5`，版本声明位于 `scripts/requirements.txt`。依赖缺失时停止并提示安装，不得跳过 Schema 校验。
 
-统一命令检查 `WEEKLY_FEEDBACK_SUBMIT_URL`、`DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 是否存在，但不会输出凭证值。任一变量不存在或为空时必须报错并终止，禁止继续调用 DWS API。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
+Agent 不得自行检查环境变量，也不得在调用前拼接 Shell 判断。统一命令负责检查 `WEEKLY_FEEDBACK_SUBMIT_URL`、`DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`，且不会输出凭证值；环境变量缺失时由命令报错并停止。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
 
 命令会重新解析 `projectRows` 并执行内部 Schema，检查项目 ID 连续、项目名唯一、选项归属和满意度状态一致，并递归扫描敏感字段。错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
 
@@ -130,7 +123,6 @@ python3 scripts/weekly_report_tool.py gen-card --type card \
 必须显式传入应用凭证参数。环境变量只作为参数值来源，不能依赖 DWS 自动注入：
 
 ```bash
-source ~/.zshrc
 dws api POST /v1.0/card/instances/createAndDeliver \
   --client-id "$DDWS_CLIENT_ID" \
   --client-secret "$DDWS_CLIENT_SECRET" \
@@ -178,7 +170,7 @@ DWS 模式产生四类产物：
 - HTML 模式只执行 `weekly_report_tool.py gen-card`；不要调用 DWS，也不要设置或修改 `callbackRouteKey`。
 - HTML 生成成功后，不要再分步替换 JSON、提交地址或输出文件。
 - 只把 `scripts/weekly_report_tool.py` 作为命令入口；不要引用或恢复独立构造器、校验器入口。
-- 先 `source ~/.zshrc`，再显式传入两个 DWS 凭证参数。
+- Agent 不得在命令外重复实现环境变量校验；生成命令失败时直接报告错误并停止后续发送。
 - 不把 DWS 用户 OAuth 登录态误认为应用身份；创建卡片使用应用 AppKey/AppSecret。
 - 不在获取不到正文时虚构客户、项目、数据或周期。
 - 不把简要描述中的推测写成周报事实。
@@ -194,6 +186,7 @@ DWS 模式产生四类产物：
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v11 | 移除 Agent 侧环境变量检查和终端配置加载步骤，统一由 `gen-card` 内部校验 | 让 Agent 只负责拼接业务参数并调用命令，避免文档与 CLI 出现两套校验逻辑 |
 | 2026-08-27 | v10 | 命令面收敛为 `gen-card --type html` 和 `gen-card --type card`；提交地址改由环境变量注入；HTML 按钮文案固定，并为 card 返回实际地址核对提示 | 避免多子命令和多种按钮文案造成调用及体验不一致，同时明确 ding-card 的回调地址不由生成请求决定 |
 | 2026-08-27 | v9 | 将 HTML 生成、DWS 请求构造和 DWS 请求校验合并到统一工具入口，并增加 HTML 数据 Schema | 对 Agent 只暴露一个稳定命令入口，同时保留对字符串化 `projectRows` 的深层校验，减少调用分支和漏校验风险 |
 | 2026-08-27 | v8 | 增加独立 HTML 模式，把 JSON 解析、提交地址注入、模板替换和文件输出封装进 `weekly_report_tool.py gen-card` | 避免 Agent 分步操作造成转义错误、提交地址遗漏或输出路径处理不一致；本次不改变 DWS 协议 |

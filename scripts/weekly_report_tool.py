@@ -28,7 +28,7 @@ MAX_PARAM_KEY_BYTES = 100
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 DWS_CARD_ENDPOINT = "/v1.0/card/instances/createAndDeliver"
 FIXED_CALLBACK_TYPE = "HTTP"
-FIXED_CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
+FIXED_CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",

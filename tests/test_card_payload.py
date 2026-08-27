@@ -13,6 +13,7 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
 CARD_EXAMPLE = SKILL_DIR / "assets" / "card-request.example.json"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
+CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
 
 
 def html_data() -> dict:
@@ -313,7 +314,7 @@ class DingCardDeliveryTests(unittest.TestCase):
         self.assertEqual(delivered_payload["callbackType"], "HTTP")
         self.assertEqual(
             delivered_payload["callbackRouteKey"],
-            "customer_feedback_aitable_v1",
+            CALLBACK_ROUTE_KEY,
         )
         self.assertNotIn("callbackType", payload)
         self.assertNotIn("callbackRouteKey", payload)
@@ -321,7 +322,7 @@ class DingCardDeliveryTests(unittest.TestCase):
     def test_card_rejects_external_callback_configuration(self) -> None:
         payload = card_payload()
         payload["callbackType"] = "HTTP"
-        payload["callbackRouteKey"] = "customer_feedback_aitable_v1"
+        payload["callbackRouteKey"] = CALLBACK_ROUTE_KEY
 
         result, record = self.run_with_fake_dws(
             payload,
@@ -376,7 +377,7 @@ class DingCardDeliveryTests(unittest.TestCase):
         expected_request = {
             **payload,
             "callbackType": "HTTP",
-            "callbackRouteKey": "customer_feedback_aitable_v1",
+            "callbackRouteKey": CALLBACK_ROUTE_KEY,
         }
         self.assertEqual(json.loads(record["stdin"]), expected_request)
         self.assertEqual(command_result["success"], True)

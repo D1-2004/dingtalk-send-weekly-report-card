@@ -23,7 +23,7 @@ description: Use when 用户提供钉钉或阿里云文档周报链接，并要�
 
 HTML 模式使用 `assets/weekly-feedback-html-data.example.json` 核对 `--data`，并使用内置 `assets/weekly-feedback-template.html`；不要直接编辑模板结构。
 
-技能包只暴露 `scripts/weekly_report_tool.py` 这一个命令工具。HTML 生成、钉钉请求构造和请求校验分别使用它的 `gen-card`、`build-card`、`validate-card` 子命令；不要直接调用其他脚本。
+技能包只暴露 `scripts/weekly_report_tool.py` 的 `gen-card` 命令。使用 `--type html` 或 `--type card` 选择产物；参数校验、分支生成和结果返回全部由这一命令完成，不要直接调用内部函数或其他脚本。
 
 ## 工作流
 
@@ -35,16 +35,16 @@ HTML 模式使用 `assets/weekly-feedback-html-data.example.json` 核对 `--data
 HTML 模式中，把周报和用户描述整理成 `WeeklyReportCardData`，然后只执行一条命令：
 
 ```bash
+source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card \
-  --format html \
+  --type html \
   --data "$CARD_DATA_JSON" \
-  --submit-url "$SUBMIT_URL" \
   --output "$OUTPUT_PATH"
 ```
 
-这一条命令封装严格 JSON 解析、提交 URL 校验与注入、模板数据替换、`</script>` 安全转义、父目录创建和文件写入。成功后直接把命令输出的绝对文件路径作为产物；不要再用脚本或文本替换工具二次编辑生成文件。
+这一条命令封装严格 JSON 解析、提交 URL 校验与注入、模板数据替换、`</script>` 安全转义、父目录创建和文件写入。内部先完成参数校验，再调用 `gen_html_card`，最后在标准输出返回结构化 JSON；`output` 是生成文件的绝对路径。不要再用脚本或文本替换工具二次编辑生成文件。
 
-`--submit-url` 必须由调用方单独提供，并且必须是绝对 HTTP 或 HTTPS URL。它是卡片最终 `callbackUrl` 的唯一权威来源；即使 `--data` 中残留了旧 `callbackUrl`，命令也必须覆盖。`--output` 接受相对路径、绝对路径和 `~` 路径。
+`WEEKLY_FEEDBACK_SUBMIT_URL` 必须由运行环境注入，并且必须是绝对 HTTP 或 HTTPS URL。它是 HTML 最终 `callbackUrl` 的唯一权威来源；命令会覆盖 `--data` 中可能残留的旧值。`--output` 接受相对路径、绝对路径和 `~` 路径。HTML 外部数据不接受按钮文案字段，界面统一使用“提交”和“已提交”。
 
 HTML 模式完成后停止，不执行第 3～6 步的 DWS 构造、认证或发送。
 
@@ -74,14 +74,16 @@ dws doc read --node "$REPORT_URL"
 
 ### 3. 生成卡片请求
 
-不要让模型直接拼接字符串化的 `projectRows`。先生成未序列化的业务对象，再调用确定性构造器：
+不要让模型直接拼接字符串化的 `projectRows`。先把未序列化业务对象保存为 `CARD_DATA_JSON`，再执行统一命令：
 
 ```bash
-python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
+source ~/.zshrc
+python3 scripts/weekly_report_tool.py gen-card --type card \
+  --data "$CARD_DATA_JSON" \
   --output card-request.json
 ```
 
-构造器会依次执行业务 Schema、反序列化变量 Schema、DWS 传输 Schema 和跨字段校验，并生成：
+命令先校验参数与 `WEEKLY_FEEDBACK_SUBMIT_URL`、`DDWS_CLIENT_ID`、`DDWS_CLIENT_SECRET`，再调用 `gen_ding_card`，依次执行业务 Schema、反序列化变量 Schema、DWS 传输 Schema 和跨字段校验，并生成：
 
 - 每次发送生成全新的 `outTrackId`。
 - `openSpaceId` 使用 `dtv1.card//IM_ROBOT.<userId>`。
@@ -100,24 +102,28 @@ python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
 
 项目数量不在模板里写死：1、3、5 项或其他数量都由 `projects` 的实际长度决定。不要静默截断项目。
 
-### 4. 调用前校验
+### 4. 调用前校验与结果核对
 
 先加载用户终端配置，然后硬性检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`：
 
 ```bash
 source ~/.zshrc
-if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
-  printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
+if [[ -z "${WEEKLY_FEEDBACK_SUBMIT_URL:-}" || -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
+  printf '错误：缺少 WEEKLY_FEEDBACK_SUBMIT_URL、DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止生成。\n' >&2
   exit 1
 fi
-python3 scripts/weekly_report_tool.py validate-card card-request.json
+python3 scripts/weekly_report_tool.py gen-card --type card \
+  --data "$CARD_DATA_JSON" \
+  --output card-request.json
 ```
 
 构造器和校验器依赖 `jsonschema>=4.18,<5`，版本声明位于 `scripts/requirements.txt`。依赖缺失时停止并提示安装，不得跳过 Schema 校验。
 
-校验器默认同时检查 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 是否存在，但不会输出其值。任一变量不存在或为空时必须报错并终止，禁止继续调用 DWS API。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
+统一命令检查 `WEEKLY_FEEDBACK_SUBMIT_URL`、`DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET` 是否存在，但不会输出凭证值。任一变量不存在或为空时必须报错并终止，禁止继续调用 DWS API。旧变量 `DWS_CLIENT_ID` 和 `DWS_CLIENT_SECRET` 不作为有效凭证来源。
 
-校验器会重新解析 `projectRows` 并执行内部 Schema，检查项目 ID 连续、项目名唯一、选项归属和满意度状态一致，并递归扫描敏感字段。错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
+命令会重新解析 `projectRows` 并执行内部 Schema，检查项目 ID 连续、项目名唯一、选项归属和满意度状态一致，并递归扫描敏感字段。错误消息不会回显字段值。校验失败时停止发送，修复所有错误后重新运行。
+
+`--type card` 的成功结果必须包含提示：`当前命令指定的数据提交地址是xxx，需核对ding-card实际提交地址`。这里的地址来自 `WEEKLY_FEEDBACK_SUBMIT_URL`，只用于提醒核对，不会写入 DWS 请求；ding-card 实际提交地址由卡片平台其他位置配置。
 
 ### 5. 显式传参调用 DWS API
 
@@ -125,7 +131,6 @@ python3 scripts/weekly_report_tool.py validate-card card-request.json
 
 ```bash
 source ~/.zshrc
-python3 scripts/weekly_report_tool.py validate-card card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
   --client-id "$DDWS_CLIENT_ID" \
   --client-secret "$DDWS_CLIENT_SECRET" \
@@ -155,7 +160,7 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 ## 产物与获取方式
 
-HTML 模式产生一个独立 HTML 文件。命令成功时在标准输出打印其绝对路径；文件内已包含渲染数据和 `callbackUrl`，可直接打开、托管或交付。
+HTML 模式产生一个独立 HTML 文件。命令成功时在标准输出返回结构化 JSON，其中 `output` 是绝对路径、`submitUrl` 是实际注入地址；文件内已包含渲染数据和 `callbackUrl`，可直接打开、托管或交付。
 
 DWS 模式产生四类产物：
 
@@ -168,7 +173,7 @@ DWS 模式产生四类产物：
 
 ## 注意事项
 
-- HTML 模式必须通过 `--submit-url` 传入提交地址，不要把地址硬编码进模板，也不要让模型把它混入展示数据。
+- HTML 模式必须从 `WEEKLY_FEEDBACK_SUBMIT_URL` 读取提交地址，不要把地址硬编码进模板，也不要让模型把它混入展示数据。
 - HTML 中的 `callbackHeaders` 对文件接收者可见，只能包含非敏感值；禁止写入令牌、密钥或长期凭证。
 - HTML 模式只执行 `weekly_report_tool.py gen-card`；不要调用 DWS，也不要设置或修改 `callbackRouteKey`。
 - HTML 生成成功后，不要再分步替换 JSON、提交地址或输出文件。
@@ -181,7 +186,6 @@ DWS 模式产生四类产物：
 - 把收集人设置为发起本次卡片任务的用户。
 - `iconUrl` 是必填的公网 HTTPS 图片 URL；缺失或格式不合法时停止构造。
 - 不直接手写 `card-request.json` 中的 JSON 字符串；始终通过构造器生成。
-- 不使用 `--skip-env-check` 执行真实发送；该选项只供离线 Schema 测试。
 - 只使用 `DDWS_CLIENT_ID` 和 `DDWS_CLIENT_SECRET`；任一变量缺失时立即报错并停止，不得执行 `dws api`。
 - 发送前始终运行参数校验器，发送后始终检查每个投递结果。
 - 已注册的回调路由是前置条件；本技能不自动覆盖回调注册。
@@ -190,7 +194,8 @@ DWS 模式产生四类产物：
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
-| 2026-08-27 | v9 | 将 HTML 生成、DWS 请求构造和 DWS 请求校验合并到 `weekly_report_tool.py` 的三个子命令，并增加 HTML 数据 Schema | 对 Agent 只暴露一个稳定命令入口，同时保留对字符串化 `projectRows` 的深层校验，减少调用分支和漏校验风险 |
+| 2026-08-27 | v10 | 命令面收敛为 `gen-card --type html` 和 `gen-card --type card`；提交地址改由环境变量注入；HTML 按钮文案固定，并为 card 返回实际地址核对提示 | 避免多子命令和多种按钮文案造成调用及体验不一致，同时明确 ding-card 的回调地址不由生成请求决定 |
+| 2026-08-27 | v9 | 将 HTML 生成、DWS 请求构造和 DWS 请求校验合并到统一工具入口，并增加 HTML 数据 Schema | 对 Agent 只暴露一个稳定命令入口，同时保留对字符串化 `projectRows` 的深层校验，减少调用分支和漏校验风险 |
 | 2026-08-27 | v8 | 增加独立 HTML 模式，把 JSON 解析、提交地址注入、模板替换和文件输出封装进 `weekly_report_tool.py gen-card` | 避免 Agent 分步操作造成转义错误、提交地址遗漏或输出路径处理不一致；本次不改变 DWS 协议 |
 | 2026-08-27 | v7 | 从原生 `feedbackForm` 切回紧凑循环布局；交互项按项目回调更新用户私有草稿，最终按钮统一写表并更新共享禁用态 | 缩短每个项目的展示高度，同时避免旧循环版满意度串值和动态本地对象无法可靠汇总的问题 |
 | 2026-08-27 | v6 | 改用动态原生 `feedbackForm`，图标变量统一为 `iconUrl`，增加快捷不满意原因并改为共享提交状态 | 修复循环交互状态串行、选项文案缺失和提交后仅个人禁用的问题，并与已保存模板协议对齐 |

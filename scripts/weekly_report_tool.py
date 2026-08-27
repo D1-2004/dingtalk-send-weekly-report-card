@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate HTML cards and build or validate DingTalk weekly-card payloads."""
+"""Generate validated HTML or DingTalk weekly-feedback cards."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ DATA_BLOCK_END = "</script>"
 CARD_TEMPLATE_ID = "3ff383e6-adfa-4117-a10f-6691f6eec086.schema"
 CALLBACK_ROUTE_KEY = "customer_feedback_aitable_v1"
 MAX_PARAM_KEY_BYTES = 100
+SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 SATISFACTION_OPTIONS = [
     {"value": "满意", "text": "满意", "checked": False},
     {"value": "不满意", "text": "不满意", "checked": False},
@@ -153,10 +154,15 @@ def parse_inline_data(value: str) -> dict[str, Any]:
     return data
 
 
-def parse_submit_url(value: str) -> str:
+def require_submit_url() -> str:
+    value = os.environ.get(SUBMIT_URL_ENV)
+    if not value:
+        raise ToolError(f"missing environment variable: {SUBMIT_URL_ENV}")
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ToolError("--submit-url must be an absolute HTTP or HTTPS URL")
+        raise ToolError(
+            f"{SUBMIT_URL_ENV} must be an absolute HTTP or HTTPS URL"
+        )
     return value
 
 
@@ -171,6 +177,15 @@ def validate_html_card_data(data: dict[str, Any]) -> None:
             f"--data failed schema validation at {schema_error_path(error)}: "
             f"{error.message}"
         )
+
+
+def validate_ding_card_data(data: dict[str, Any]) -> None:
+    try:
+        errors = schema_errors(data, "weekly-card-input.schema.json", "input")
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ToolError(f"cannot load DingTalk card input schema: {error}") from error
+    if errors:
+        raise ToolError("card data failed schema validation: " + "; ".join(errors))
 
 
 def replace_data_block(template: str, data: dict[str, Any]) -> str:
@@ -208,18 +223,23 @@ def write_output(output_value: str, content: str) -> Path:
     return output_path
 
 
-def generate_html(args: argparse.Namespace) -> int:
-    template_path = Path(args.template).expanduser()
+def gen_html_card(
+    args: argparse.Namespace, data: dict[str, Any], submit_url: str
+) -> dict[str, Any]:
+    template_path = Path(args.template or DEFAULT_TEMPLATE).expanduser()
     try:
         template = template_path.read_text(encoding="utf-8")
     except (OSError, ValueError) as error:
-        raise ToolError(f"cannot read --template path {args.template!r}: {error}") from error
-    data = parse_inline_data(args.data)
-    data["callbackUrl"] = parse_submit_url(args.submit_url)
-    validate_html_card_data(data)
+        raise ToolError(
+            f"cannot read --template path {str(template_path)!r}: {error}"
+        ) from error
     output_path = write_output(args.output, replace_data_block(template, data))
-    print(output_path.resolve())
-    return 0
+    return {
+        "success": True,
+        "type": "html",
+        "output": str(output_path.resolve()),
+        "submitUrl": submit_url,
+    }
 
 
 def compact_json(value: Any) -> str:
@@ -395,125 +415,91 @@ def validate_payload(payload: Any, check_env: bool) -> tuple[list[str], int]:
     return errors, project_count
 
 
-def build_card(args: argparse.Namespace) -> int:
-    try:
-        data = load_json(args.input)
-        input_errors = schema_errors(data, "weekly-card-input.schema.json", "input")
-        if input_errors:
-            print(
-                json.dumps({"valid": False, "errors": input_errors}, ensure_ascii=False),
-                file=sys.stderr,
-            )
-            return 1
-        payload = build_payload(data)
-        payload_errors, _ = validate_payload(payload, check_env=False)
-        if payload_errors:
-            print(
-                json.dumps(
-                    {"valid": False, "errors": payload_errors}, ensure_ascii=False
-                ),
-                file=sys.stderr,
-            )
-            return 1
-    except (OSError, json.JSONDecodeError, RuntimeError) as error:
-        print(
-            json.dumps(
-                {"valid": False, "errors": [f"cannot build payload: {error}"]},
-                ensure_ascii=False,
-            ),
-            file=sys.stderr,
-        )
-        return 1
-    rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    if args.output:
-        try:
-            write_output(args.output, rendered)
-        except ToolError as error:
-            print(
-                json.dumps({"valid": False, "errors": [str(error)]}, ensure_ascii=False),
-                file=sys.stderr,
-            )
-            return 1
+def validate_generation_parameters(
+    args: argparse.Namespace,
+) -> tuple[dict[str, Any], str]:
+    if args.type == "card" and args.template is not None:
+        raise ToolError("--template is only valid with --type html")
+
+    data = parse_inline_data(args.data)
+    submit_url = require_submit_url()
+    if args.type == "html":
+        data["callbackUrl"] = submit_url
+        validate_html_card_data(data)
     else:
-        sys.stdout.write(rendered)
-    return 0
-
-
-def validate_card(args: argparse.Namespace) -> int:
-    try:
-        payload = load_json(args.payload)
-        errors, project_count = validate_payload(
-            payload, check_env=not args.skip_env_check
-        )
-    except (OSError, json.JSONDecodeError, RuntimeError) as error:
-        print(
-            json.dumps(
-                {"valid": False, "errors": [f"cannot validate payload: {error}"]},
-                ensure_ascii=False,
+        missing = [
+            name
+            for name in ("DDWS_CLIENT_ID", "DDWS_CLIENT_SECRET")
+            if not os.environ.get(name)
+        ]
+        if missing:
+            raise ToolError(
+                "missing environment variables: " + ", ".join(missing)
             )
+        validate_ding_card_data(data)
+    return data, submit_url
+
+
+def gen_ding_card(
+    args: argparse.Namespace, data: dict[str, Any], submit_url: str
+) -> dict[str, Any]:
+    try:
+        payload = build_payload(data)
+        payload_errors, project_count = validate_payload(payload, check_env=False)
+    except (OSError, json.JSONDecodeError, RuntimeError) as error:
+        raise ToolError(f"cannot generate DingTalk card: {error}") from error
+    if payload_errors:
+        raise ToolError(
+            "generated DingTalk card failed validation: "
+            + "; ".join(payload_errors)
         )
-        return 1
-    if errors:
-        print(json.dumps({"valid": False, "errors": errors}, ensure_ascii=False))
-        return 1
-    print(
-        json.dumps(
-            {
-                "valid": True,
-                "outTrackId": payload["outTrackId"],
-                "recipientSpace": payload["openSpaceId"],
-                "projectCount": project_count,
-            },
-            ensure_ascii=False,
-        )
+
+    output_path = write_output(
+        args.output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     )
+    return {
+        "success": True,
+        "type": "card",
+        "output": str(output_path.resolve()),
+        "submitUrl": submit_url,
+        "warning": (
+            f"当前命令指定的数据提交地址是{submit_url}，"
+            "需核对ding-card实际提交地址"
+        ),
+        "outTrackId": payload["outTrackId"],
+        "recipientSpace": payload["openSpaceId"],
+        "projectCount": project_count,
+    }
+
+
+def generate_card(args: argparse.Namespace) -> int:
+    data, submit_url = validate_generation_parameters(args)
+    generator = gen_html_card if args.type == "html" else gen_ding_card
+    result = generator(args, data, submit_url)
+    print(json.dumps(result, ensure_ascii=False))
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="weekly_report_tool",
-        description="Generate HTML cards and build or validate DingTalk card requests.",
+        description="Generate a validated HTML or DingTalk weekly-feedback card.",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     generate = subcommands.add_parser(
-        "gen-card", help="Generate a standalone HTML card from strict JSON data."
+        "gen-card", help="Generate an HTML or DingTalk card from strict JSON data."
     )
-    generate.add_argument("--format", choices=("html",), required=True)
+    generate.add_argument("--type", choices=("html", "card"), required=True)
     generate.add_argument(
         "--template",
-        default=str(DEFAULT_TEMPLATE),
-        help="HTML template path. Defaults to the bundled template.",
+        help="HTML template path; valid only with --type html.",
     )
     generate.add_argument("--data", required=True, help="Strict JSON object.")
     generate.add_argument(
-        "--submit-url",
-        required=True,
-        help="Absolute HTTP or HTTPS feedback submission endpoint.",
-    )
-    generate.add_argument(
         "--output", required=True, help="Output file path; relative and absolute work."
     )
-    generate.set_defaults(handler=generate_html)
-
-    build = subcommands.add_parser(
-        "build-card", help="Build and validate a DingTalk createAndDeliver request."
-    )
-    build.add_argument("input", help="Normalized weekly-card input JSON file.")
-    build.add_argument("--output", help="Write request JSON here; defaults to stdout.")
-    build.set_defaults(handler=build_card)
-
-    validate = subcommands.add_parser(
-        "validate-card", help="Validate a DingTalk createAndDeliver request."
-    )
-    validate.add_argument("payload", help="Request JSON file, or '-' for stdin.")
-    validate.add_argument(
-        "--skip-env-check",
-        action="store_true",
-        help="Skip DDWS credential checks for offline schema work only.",
-    )
-    validate.set_defaults(handler=validate_card)
+    generate.set_defaults(handler=generate_card)
     return parser
 
 

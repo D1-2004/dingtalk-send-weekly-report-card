@@ -7,35 +7,36 @@
 ## 单命令接口
 
 ```bash
+source ~/.zshrc
 python3 scripts/weekly_report_tool.py gen-card \
-  --format html \
+  --type html \
   --data "$CARD_DATA_JSON" \
-  --submit-url "$SUBMIT_URL" \
   --output "$OUTPUT_PATH"
 ```
 
 命令内部依次完成：
 
 1. 将 `--data` 解析为严格 JSON 对象。
-2. 校验 `--submit-url` 是绝对 HTTP 或 HTTPS URL。
-3. 用 `--submit-url` 覆盖数据体中可能残留的 `callbackUrl`。
+2. 读取并校验 `WEEKLY_FEEDBACK_SUBMIT_URL` 是绝对 HTTP 或 HTTPS URL。
+3. 用该环境变量覆盖数据体中可能残留的 `callbackUrl`。
 4. 安全序列化 JSON，转义字符串中的 `</script>`。
 5. 只替换模板的 `script#weeklyReportCardData` 数据体。
 6. 创建缺失的父目录并写入 `--output` 指定的文件。
 
-`weekly_report_tool.py` 是技能包唯一命令工具；同一脚本还提供 `build-card` 和 `validate-card`，HTML 模式只使用 `gen-card`。
+`weekly_report_tool.py gen-card` 是技能包唯一命令；HTML 模式使用 `--type html`，内部依次完成参数校验、调用 `gen_html_card` 和结果返回。
 
-成功时标准输出只有生成文件的绝对路径；失败时返回非零退出码且不生成目标文件。
+成功时标准输出返回结构化 JSON，包含 `success`、`type`、`output` 和 `submitUrl`；失败时返回非零退出码且不生成目标文件。
 
 ## 参数
 
 | 参数 | 必填 | 约束 |
 | --- | --- | --- |
-| `--format` | 是 | 当前只接受 `html` |
+| `--type` | 是 | HTML 模式固定为 `html`；另一个允许值为 `card` |
 | `--data` | 是 | 严格 JSON 对象；不要传 Python 字面量或序列化后的嵌套 JSON 字符串 |
-| `--submit-url` | 是 | 绝对 `http://` 或 `https://` 地址；作为最终 `callbackUrl` |
 | `--output` | 是 | 输出文件地址；支持相对路径、绝对路径和 `~`，缺失父目录自动创建 |
 | `--template` | 否 | 兼容模板文件；默认使用技能包内置模板 |
+
+运行环境必须提供 `WEEKLY_FEEDBACK_SUBMIT_URL`，其值必须是绝对 `http://` 或 `https://` 地址，并作为最终 `callbackUrl`。
 
 ## `--data` 对象
 
@@ -58,8 +59,6 @@ WeeklyReportCardData {
     reasonOptions?: Array<{ value: string, text?: { zh_CN?: string } }>
   }>
   dissatisfactionOptions: string[]
-  submitButtonText?: string
-  submittedButtonText?: string
   reportPeriod: string
   customer: string
   week: string
@@ -71,7 +70,9 @@ WeeklyReportCardData {
 }
 ```
 
-不要要求模型在 `--data` 中生成 `callbackUrl`。提交地址由可信调用方通过 `--submit-url` 独立传入，命令行参数始终覆盖 JSON 中的同名旧值。
+不要要求模型在 `--data` 中生成 `callbackUrl`。提交地址由可信运行环境通过 `WEEKLY_FEEDBACK_SUBMIT_URL` 注入，命令始终覆盖 JSON 中的同名旧值。
+
+`--data` 不接受提交按钮文案字段。模板统一显示“提交”，成功后显示“已提交”，避免不同生成批次出现“提交反馈”等不一致文案。
 
 `callbackHeaders` 会以明文写入交付给用户的 HTML，只能放公开且非敏感的固定头；不要写入令牌、密钥或长期凭证。需要鉴权时由提交服务采用短期签名地址、会话鉴权或服务端校验。
 
@@ -85,5 +86,6 @@ WeeklyReportCardData {
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
+| 2026-08-27 | v3 | 生成入口改为 `gen-card --type html`，提交地址改从环境变量读取，按钮文案固定 | 统一 HTML 与 ding-card 的命令面，并消除调用参数及界面文案漂移 |
 | 2026-08-27 | v2 | 增加 HTML 数据 Draft 2020-12 Schema，并把生成命令纳入统一工具入口 | 确保图标、标题、周期、链接、简报、动态项目、快捷选项和提交地址在生成前都经过结构校验 |
-| 2026-08-27 | v1 | 增加 `--submit-url`、`--output` 和 JSON 数据的一体化 HTML 生成命令 | 避免 Agent 分步编辑模板、拼接提交地址和创建文件，减少转义错误与提交到错误端点的风险 |
+| 2026-08-27 | v1 | 增加输出路径和 JSON 数据的一体化 HTML 生成命令 | 避免 Agent 分步编辑模板、拼接提交地址和创建文件，减少转义错误与提交到错误端点的风险 |

@@ -896,7 +896,6 @@
           reasonOptions?: Array<{ value: string, text?: { zh_CN?: string } }>
         }>,
         dissatisfactionOptions: string[],
-        submitButtonText?: string, submittedButtonText?: string,
         reportPeriod: string, customer: string, week: string,
         collector: string, reportTime: string, submissionId: string,
         callbackUrl?: string, callbackHeaders?: Record<string, string>,
@@ -939,8 +938,6 @@
           "需求理解偏差",
           "其他"
         ],
-        "submitButtonText": "提交",
-        "submittedButtonText": "已提交",
         "reportPeriod": "2026年3月31日—2026年4月10日",
         "customer": "维信诺",
         "week": "2026-W15",
@@ -1129,8 +1126,6 @@
 
           const optionalStrings = [
             "reportLinkText",
-            "submitButtonText",
-            "submittedButtonText",
             "callbackUrl",
           ];
           optionalStrings.forEach((field) => {
@@ -1161,8 +1156,6 @@
 
           return {
             reportLinkText: "查看完整周报",
-            submitButtonText: "提交",
-            submittedButtonText: "已提交",
             callbackUrl: "",
             callbackHeaders: {},
             formDisabled: false,
@@ -1451,7 +1444,7 @@
         function setSubmitted() {
           state.submitted = true;
           elements.card.classList.add("is-submitted");
-          elements.submitButton.textContent = params.submittedButtonText || "已提交";
+          elements.submitButton.textContent = "已提交";
           elements.submitButton.disabled = true;
           renderProjects();
         }
@@ -1493,7 +1486,7 @@
             elements.submitMessage.textContent = "反馈已提交，感谢您的确认";
           } catch (error) {
             elements.submitButton.disabled = false;
-            elements.submitButton.textContent = params.submitButtonText || "提交";
+            elements.submitButton.textContent = "提交";
             elements.submitMessage.classList.add("is-error");
             elements.submitMessage.textContent = error?.message || "提交失败，请稍后重试";
           }
@@ -1508,7 +1501,7 @@
           elements.reportLink.href = safeHttpUrl(params.reportUrl);
           elements.reportLinkText.textContent = params.reportLinkText || "查看完整周报";
           elements.period.textContent = params.reportPeriod;
-          elements.submitButton.textContent = params.submitButtonText || "提交";
+          elements.submitButton.textContent = "提交";
           elements.submitButton.addEventListener("click", submitFeedback);
           renderSummary();
           renderProjects();
@@ -1521,6 +1514,8 @@
 
     <!--
       数据契约变更历史
+      2026-08-27 / schemaVersion 1：提交按钮文案固定为“提交 / 已提交”，不再从外部数据读取。
+      变更原因：避免不同生成批次出现“提交”“提交反馈”等不一致文案。
       2026-08-27 / schemaVersion 1：将可替换数据从 JavaScript 对象字面量迁移为单一严格 JSON 数据块。
       变更原因：便于 Agent 只替换 JSON 完成 HTML 生成，同时保留 projects 等嵌套结构的类型校验，避免字符串化 JSON 绕过校验。
     -->

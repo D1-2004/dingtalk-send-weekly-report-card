@@ -69,16 +69,6 @@
         "maxLength": 50
       }
     },
-    "submitButtonText": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 20
-    },
-    "submittedButtonText": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 20
-    },
     "reportPeriod": {
       "type": "string",
       "minLength": 1,

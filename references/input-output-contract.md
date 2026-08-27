@@ -78,7 +78,9 @@ dws doc read --node "$REPORT_URL"
 不要让模型直接构造 `cardData.cardParamMap`。使用构造器：
 
 ```bash
-python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
+source ~/.zshrc
+python3 scripts/weekly_report_tool.py gen-card --type card \
+  --data "$CARD_DATA_JSON" \
   --output card-request.json
 ```
 
@@ -122,7 +124,7 @@ python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
 
 ### 独立 HTML 产物
 
-用户要求单 HTML 卡片时，按照 `html-generator-contract.md` 生成 `WeeklyReportCardData`，把提交地址作为独立 `--submit-url` 参数传给 `weekly_report_tool.py gen-card`。命令输出的绝对路径就是最终产物；不要继续构造或发送 DWS 请求。
+用户要求单 HTML 卡片时，按照 `html-generator-contract.md` 生成 `WeeklyReportCardData`，由运行环境通过 `WEEKLY_FEEDBACK_SUBMIT_URL` 提供提交地址，再执行 `weekly_report_tool.py gen-card --type html`。命令结果中的 `output` 绝对路径就是最终产物；不要继续构造或发送 DWS 请求。
 
 ### 业务产物
 
@@ -130,11 +132,13 @@ python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
 
 ### 请求产物
 
-`card-request.json` 是构造器输出的 DWS 请求。发送前再次运行：
+`card-request.json` 是 `gen-card --type card` 完成参数校验、构造和深层校验后输出的 DWS 请求。生成命令的结果会返回 `submitUrl` 和核对 ding-card 实际提交地址的提示。
 
 ```bash
 source ~/.zshrc
-python3 scripts/weekly_report_tool.py validate-card card-request.json
+python3 scripts/weekly_report_tool.py gen-card --type card \
+  --data "$CARD_DATA_JSON" \
+  --output card-request.json
 ```
 
 ### 投递产物
@@ -153,8 +157,9 @@ DWS 返回的 `result.outTrackId` 是本次卡片实例的主要追踪标识。�
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
-| 2026-08-27 | v8 | 构造和校验改为 `weekly_report_tool.py build-card` 与 `validate-card` 子命令 | 统一技能包命令入口，避免 Agent 在多个脚本之间选择错误或跳过校验 |
-| 2026-08-27 | v7 | 增加独立 HTML 产物分支，并把提交地址从展示数据中分离为 `--submit-url` | 让生成过程由单命令完成，同时避免模型生成或遗留错误的回调地址；DWS 分支保持不变 |
+| 2026-08-27 | v9 | HTML 与钉钉卡片统一使用 `gen-card --type`，提交地址从 `WEEKLY_FEEDBACK_SUBMIT_URL` 读取 | 将参数校验、分支生成和结果返回收口到同一命令，并明确 card 只提示核对而不嵌入该地址 |
+| 2026-08-27 | v8 | 构造和校验合并到统一工具入口 | 避免 Agent 在多个入口之间选择错误或跳过校验 |
+| 2026-08-27 | v7 | 增加独立 HTML 产物分支，并把提交地址从展示数据中分离为环境配置 | 让生成过程由单命令完成，同时避免模型生成或遗留错误的回调地址；DWS 分支保持不变 |
 | 2026-08-27 | v6 | 恢复紧凑动态 `projectRows`，增加交互草稿回调与最终统一提交的分层协议 | 降低项目区域高度，并以服务端私有草稿保证各项目状态独立可靠 |
 | 2026-08-27 | v5 | 业务图标字段改为 `iconUrl`，传输层恢复动态 `feedbackForm` 并增加 `reasons_N` | 与已保存的原生 Form 模板变量保持一致，并保留快捷不满意原因 |
 | 2026-08-26 | v3 | 用动态 `projectRows` 取代固定编号表单字段，项目数不再限制为 2 | 让模板按实际项目数量循环渲染并保持结构化校验 |

@@ -40,14 +40,14 @@ POST /v1.0/card/instances/createAndDeliver
 先把业务对象确定性转换成传输请求，再从用户终端配置加载凭证，并把凭证作为命令行参数显式传给 DWS：
 
 ```bash
-python3 scripts/weekly_report_tool.py build-card weekly-card-input.json \
-  --output card-request.json
 source ~/.zshrc
-if [[ -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
-  printf '错误：缺少 DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止发送。\n' >&2
+if [[ -z "${WEEKLY_FEEDBACK_SUBMIT_URL:-}" || -z "${DDWS_CLIENT_ID:-}" || -z "${DDWS_CLIENT_SECRET:-}" ]]; then
+  printf '错误：缺少 WEEKLY_FEEDBACK_SUBMIT_URL、DDWS_CLIENT_ID 或 DDWS_CLIENT_SECRET，停止生成。\n' >&2
   exit 1
 fi
-python3 scripts/weekly_report_tool.py validate-card card-request.json
+python3 scripts/weekly_report_tool.py gen-card --type card \
+  --data "$CARD_DATA_JSON" \
+  --output card-request.json
 dws api POST /v1.0/card/instances/createAndDeliver \
   --client-id "$DDWS_CLIENT_ID" \
   --client-secret "$DDWS_CLIENT_SECRET" \
@@ -60,7 +60,9 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 禁止省略 `--client-id` 和 `--client-secret` 后依赖 DWS 的隐式环境变量注入。禁止把凭证放入 `card-request.json`。
 
-禁止直接手写 `projectRows` 字符串。真实发送不得使用校验器的 `--skip-env-check`。
+禁止直接手写 `projectRows` 字符串。`gen-card --type card` 会在生成文件前完成业务、传输、反序列化变量、跨字段和凭证存在性校验。
+
+命令成功结果中的 `submitUrl` 来自 `WEEKLY_FEEDBACK_SUBMIT_URL`，同时返回：`当前命令指定的数据提交地址是xxx，需核对ding-card实际提交地址`。该地址不会写进 createAndDeliver 请求，必须到卡片平台配置处核对实际回调地址。
 
 循环交互组件的满意度、原因和输入事件使用同一个 HTTP 路由，但草稿事件只更新 `userPrivateData.projectRows`，不得调用 AI 表格。只有 `submit_weekly_feedback` 最终事件写表；写入成功后回调将共享 `cardData.formState`、`formDisabled`、`submitButtonText` 更新为 `disabled`、`true`、`已提交`。
 
@@ -95,7 +97,8 @@ dws api POST /v1.0/card/instances/createAndDeliver \
 
 | 日期 | 版本 | 改动 | 原因 |
 | --- | --- | --- | --- |
-| 2026-08-27 | v8 | DWS 请求构造与校验改为统一工具的 `build-card`、`validate-card` 子命令 | 对技能调用方只保留一个命令入口，同时继续执行分层 Schema、跨字段和凭证存在性校验 |
+| 2026-08-27 | v9 | DWS 请求统一由 `gen-card --type card` 校验并生成，结果增加预期提交地址核对提示 | 对外只保留一个生成命令，并明确预期地址不会覆盖卡片平台实际回调配置 |
+| 2026-08-27 | v8 | DWS 请求构造与校验合并到统一工具入口 | 对技能调用方只保留一个命令入口，同时继续执行分层 Schema、跨字段和凭证存在性校验 |
 | 2026-08-27 | v7 | 传输变量恢复为结构化 `projectRows`；增加“私有草稿更新”和“最终写表提交”两类回调语义 | 紧凑循环布局需要逐项服务端同步才能保证项目状态独立，同时保持 AI 表格只写一次 |
 | 2026-08-27 | v6 | 传输协议改为动态原生 `feedbackForm`，移除错误的单值 1024 字节自限，并把共享提交状态收口到回调 `cardData` | 支持 3–5 个及更多项目的独立表单字段，同时确保一次提交后整张卡片不可再次提交 |
 | 2026-08-26 | v4 | 传输协议由固定 `feedbackForm` 改为动态 `projectRows`，增加项目行内部 Schema | 支持任意实际项目数并防止字符串化数组绕过结构校验 |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -13,7 +14,18 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
 CARD_EXAMPLE = SKILL_DIR / "assets" / "card-request.example.json"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
-CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
+AITABLE_WEBHOOK_URL = (
+    "https://connector.dingtalk.com/webhook/flow/103b082bde2f2107d5c80007"
+)
+AITABLE_FLOW_ID = "103b082bde2f2107d5c80007"
+MULTICA_CALLBACK_URL = (
+    "https://fde-workbench.dingtalk.com/api/dingtalk/card/customer-feedback/"
+    + AITABLE_FLOW_ID
+)
+CALLBACK_ROUTE_KEY = (
+    "customer_feedback_multica_"
+    + hashlib.sha256(AITABLE_FLOW_ID.encode("ascii")).hexdigest()[:20]
+)
 
 
 def html_data() -> dict:
@@ -76,11 +88,14 @@ import os
 from pathlib import Path
 import sys
 
-record = {"argv": sys.argv[1:], "stdin": sys.stdin.read()}
-Path(os.environ["FAKE_DWS_RECORD"]).write_text(
-    json.dumps(record, ensure_ascii=False), encoding="utf-8"
-)
-sys.stdout.write(os.environ.get("FAKE_DWS_STDOUT", ""))
+record_path = Path(os.environ["FAKE_DWS_RECORD"])
+records = json.loads(record_path.read_text()) if record_path.exists() else []
+records.append({"argv": sys.argv[1:], "stdin": sys.stdin.read()})
+record_path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+if "/v1.0/card/callbacks/register" in sys.argv:
+    sys.stdout.write(os.environ.get("FAKE_DWS_REGISTER_STDOUT", ""))
+else:
+    sys.stdout.write(os.environ.get("FAKE_DWS_STDOUT", ""))
 sys.stderr.write(os.environ.get("FAKE_DWS_STDERR", ""))
 raise SystemExit(int(os.environ.get("FAKE_DWS_EXIT", "0")))
 """,
@@ -122,6 +137,7 @@ def command_environment(
         "DWS_CLIENT_SECRET",
         "FAKE_DWS_RECORD",
         "FAKE_DWS_STDOUT",
+        "FAKE_DWS_REGISTER_STDOUT",
         "FAKE_DWS_STDERR",
         "FAKE_DWS_EXIT",
     ):
@@ -144,6 +160,13 @@ def command_environment(
             if isinstance(fake_response, str)
             else json.dumps(fake_response, ensure_ascii=False)
         )
+    environment["FAKE_DWS_REGISTER_STDOUT"] = json.dumps(
+        {
+            "success": True,
+            "result": {"callbackUrl": MULTICA_CALLBACK_URL},
+        },
+        ensure_ascii=False,
+    )
     environment["FAKE_DWS_EXIT"] = str(fake_exit)
     environment["FAKE_DWS_STDERR"] = fake_stderr
     return environment
@@ -253,6 +276,7 @@ class DingCardDeliveryTests(unittest.TestCase):
         response: dict | str | None = None,
         exit_code: int = 0,
         stderr: str = "",
+        submit_url: str | None = AITABLE_WEBHOOK_URL,
         extra_args: list[str] | None = None,
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
         temp_dir = tempfile.TemporaryDirectory()
@@ -264,6 +288,7 @@ class DingCardDeliveryTests(unittest.TestCase):
             "card",
             payload,
             environment=command_environment(
+                submit_url=submit_url,
                 ddws=ddws,
                 legacy_dws=legacy_dws,
                 fake_dws_dir=directory,
@@ -300,7 +325,30 @@ class DingCardDeliveryTests(unittest.TestCase):
         self.assertIn("card data failed validation", result.stderr)
         self.assertFalse(record.exists())
 
-    def test_card_injects_fixed_callback_route_before_invoking_dws(self) -> None:
+    def test_card_requires_submit_url_environment_before_invoking_dws(self) -> None:
+        payload = card_payload()
+        result = run_gen_card(
+            "card",
+            payload,
+            environment=command_environment(ddws=True),
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(SUBMIT_URL_ENV, result.stderr)
+
+    def test_card_rejects_non_dingtalk_flow_webhook_before_invoking_dws(self) -> None:
+        payload = card_payload()
+        result, record = self.run_with_fake_dws(
+            payload,
+            response=success_response(payload),
+            submit_url="https://example.com/webhook/flow/103b082bde2f2107d5c80007",
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("connector.dingtalk.com", result.stderr)
+        self.assertFalse(record.exists())
+
+    def test_card_registers_multica_callback_before_invoking_delivery(self) -> None:
         payload = card_payload()
         payload.pop("callbackType", None)
         payload.pop("callbackRouteKey", None)
@@ -309,8 +357,23 @@ class DingCardDeliveryTests(unittest.TestCase):
         result, record_path = self.run_with_fake_dws(payload, response=response)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        record = json.loads(record_path.read_text(encoding="utf-8"))
-        delivered_payload = json.loads(record["stdin"])
+        records = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(records), 2)
+        register, deliver = records
+        self.assertEqual(
+            register["argv"][:3],
+            ["api", "POST", "/v1.0/card/callbacks/register"],
+        )
+        registered_payload = json.loads(register["stdin"])
+        self.assertEqual(
+            registered_payload,
+            {
+                "callbackRouteKey": CALLBACK_ROUTE_KEY,
+                "callbackUrl": MULTICA_CALLBACK_URL,
+                "forceUpdate": True,
+            },
+        )
+        delivered_payload = json.loads(deliver["stdin"])
         self.assertEqual(delivered_payload["callbackType"], "HTTP")
         self.assertEqual(
             delivered_payload["callbackRouteKey"],
@@ -357,7 +420,25 @@ class DingCardDeliveryTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         command_result = json.loads(result.stdout)
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        records = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(records), 2)
+        register, record = records
+
+        self.assertEqual(
+            register["argv"],
+            [
+                "api",
+                "POST",
+                "/v1.0/card/callbacks/register",
+                "--client-id",
+                "ddws-client-id",
+                "--client-secret",
+                "ddws-client-secret",
+                "--yes",
+                "--data",
+                "-",
+            ],
+        )
 
         self.assertEqual(
             record["argv"],
@@ -384,6 +465,8 @@ class DingCardDeliveryTests(unittest.TestCase):
         self.assertEqual(command_result["type"], "card")
         self.assertEqual(command_result["outTrackId"], payload["outTrackId"])
         self.assertEqual(command_result["projectCount"], 3)
+        self.assertEqual(command_result["callbackRouteKey"], CALLBACK_ROUTE_KEY)
+        self.assertEqual(command_result["callbackUrl"], MULTICA_CALLBACK_URL)
         self.assertEqual(command_result["dwsResponse"], response)
 
     def test_card_rejects_output_argument(self) -> None:

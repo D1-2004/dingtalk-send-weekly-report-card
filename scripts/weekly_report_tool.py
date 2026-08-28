@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -27,8 +28,15 @@ DATA_BLOCK_END = "</script>"
 MAX_PARAM_KEY_BYTES = 100
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 DWS_CARD_ENDPOINT = "/v1.0/card/instances/createAndDeliver"
-FIXED_CALLBACK_TYPE = "HTTP"
-FIXED_CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
+DWS_CALLBACK_REGISTER_ENDPOINT = "/v1.0/card/callbacks/register"
+CALLBACK_TYPE = "HTTP"
+AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
+AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
+MULTICA_CALLBACK_BASE_URL = (
+    "https://fde-workbench.dingtalk.com/api/dingtalk/card/customer-feedback/"
+)
+CALLBACK_ROUTE_KEY_PREFIX = "customer_feedback_multica_"
+FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",
@@ -151,6 +159,40 @@ def require_submit_url() -> str:
             f"{SUBMIT_URL_ENV} must be an absolute HTTP or HTTPS URL"
         )
     return value
+
+
+def build_callback_config(aitable_webhook_url: str) -> dict[str, str]:
+    try:
+        parsed = urlparse(aitable_webhook_url)
+        port = parsed.port
+    except ValueError as error:
+        raise ToolError(f"{SUBMIT_URL_ENV} is invalid") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != AITABLE_WEBHOOK_HOST
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith(AITABLE_WEBHOOK_PATH_PREFIX)
+    ):
+        raise ToolError(
+            f"{SUBMIT_URL_ENV} must use "
+            "https://connector.dingtalk.com/webhook/flow/{flowId}"
+        )
+    flow_id = parsed.path[len(AITABLE_WEBHOOK_PATH_PREFIX) :]
+    if not FLOW_ID_PATTERN.fullmatch(flow_id):
+        raise ToolError(
+            f"{SUBMIT_URL_ENV} flowId must contain 1-128 letters, digits, "
+            "underscores, or hyphens"
+        )
+    route_digest = hashlib.sha256(flow_id.encode("ascii")).hexdigest()[:20]
+    return {
+        "flowId": flow_id,
+        "callbackRouteKey": CALLBACK_ROUTE_KEY_PREFIX + route_digest,
+        "callbackUrl": MULTICA_CALLBACK_BASE_URL + flow_id,
+    }
 
 
 def validate_html_card_data(data: dict[str, Any]) -> None:
@@ -336,20 +378,26 @@ def validate_payload(payload: Any) -> tuple[list[str], int]:
 
 def validate_generation_parameters(
     args: argparse.Namespace,
-) -> tuple[dict[str, Any], str | None, dict[str, str] | None]:
+) -> tuple[
+    dict[str, Any],
+    str | None,
+    dict[str, str] | None,
+    dict[str, str] | None,
+]:
     if args.type == "card" and args.template is not None:
         raise ToolError("--template is only valid with --type html")
     if args.type == "card" and args.output is not None:
         raise ToolError("--output is only valid with --type html")
     if args.type == "html" and args.output is None:
         raise ToolError("--output is required with --type html")
-
     data = parse_inline_data(args.data)
+    submit_url = require_submit_url()
     if args.type == "html":
-        submit_url = require_submit_url()
         data["callbackUrl"] = submit_url
         validate_html_card_data(data)
-        return data, submit_url, None
+        return data, submit_url, None, None
+
+    callback_config = build_callback_config(submit_url)
 
     missing = [
         name
@@ -368,7 +416,7 @@ def validate_generation_parameters(
         "client_id": os.environ["DDWS_CLIENT_ID"],
         "client_secret": os.environ["DDWS_CLIENT_SECRET"],
     }
-    return data, None, credentials
+    return data, None, credentials, callback_config
 
 
 def parse_dws_response(stdout: str) -> dict[str, Any]:
@@ -401,21 +449,18 @@ def validate_delivery_response(
         raise ToolError("DWS returned a failed delivery result")
 
 
-def gen_ding_card(
-    data: dict[str, Any], credentials: dict[str, str]
+def run_dws_api(
+    endpoint: str,
+    payload: dict[str, Any],
+    credentials: dict[str, str],
 ) -> dict[str, Any]:
-    request_payload = {
-        **data,
-        "callbackType": FIXED_CALLBACK_TYPE,
-        "callbackRouteKey": FIXED_CALLBACK_ROUTE_KEY,
-    }
     try:
         completed = subprocess.run(
             [
                 "dws",
                 "api",
                 "POST",
-                DWS_CARD_ENDPOINT,
+                endpoint,
                 "--client-id",
                 credentials["client_id"],
                 "--client-secret",
@@ -424,7 +469,7 @@ def gen_ding_card(
                 "--data",
                 "-",
             ],
-            input=json.dumps(request_payload, ensure_ascii=False),
+            input=json.dumps(payload, ensure_ascii=False),
             text=True,
             capture_output=True,
             check=False,
@@ -435,8 +480,41 @@ def gen_ding_card(
         raise ToolError("cannot execute dws command") from error
     if completed.returncode != 0:
         raise ToolError(f"DWS command failed with exit code {completed.returncode}")
+    return parse_dws_response(completed.stdout)
 
-    response = parse_dws_response(completed.stdout)
+
+def register_callback(
+    callback_config: dict[str, str], credentials: dict[str, str]
+) -> None:
+    callback_url = callback_config["callbackUrl"]
+    response = run_dws_api(
+        DWS_CALLBACK_REGISTER_ENDPOINT,
+        {
+            "callbackRouteKey": callback_config["callbackRouteKey"],
+            "callbackUrl": callback_url,
+            "forceUpdate": True,
+        },
+        credentials,
+    )
+    if response.get("success") is not True:
+        raise ToolError("DWS callback registration returned success=false")
+    result = response.get("result")
+    if not isinstance(result, dict) or result.get("callbackUrl") != callback_url:
+        raise ToolError("DWS callback registration result does not match request")
+
+
+def gen_ding_card(
+    data: dict[str, Any],
+    credentials: dict[str, str],
+    callback_config: dict[str, str],
+) -> dict[str, Any]:
+    register_callback(callback_config, credentials)
+    request_payload = {
+        **data,
+        "callbackType": CALLBACK_TYPE,
+        "callbackRouteKey": callback_config["callbackRouteKey"],
+    }
+    response = run_dws_api(DWS_CARD_ENDPOINT, request_payload, credentials)
     validate_delivery_response(response, data["outTrackId"])
     _, project_count = validate_payload(data)
     return {
@@ -445,16 +523,24 @@ def gen_ding_card(
         "outTrackId": data["outTrackId"],
         "recipientSpace": data["openSpaceId"],
         "projectCount": project_count,
+        "callbackRouteKey": callback_config["callbackRouteKey"],
+        "callbackUrl": callback_config["callbackUrl"],
         "dwsResponse": response,
     }
 
 
 def generate_card(args: argparse.Namespace) -> int:
-    data, submit_url, credentials = validate_generation_parameters(args)
+    data, submit_url, credentials, callback_config = validate_generation_parameters(
+        args
+    )
     if args.type == "html":
         result = gen_html_card(args, data, submit_url or "")
     else:
-        result = gen_ding_card(data, credentials or {})
+        result = gen_ding_card(
+            data,
+            credentials or {},
+            callback_config or {},
+        )
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

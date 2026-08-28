@@ -14,7 +14,7 @@ scripts/weekly_report_tool.py gen-card
 ```
 
 - `--type html`：校验数据、注入提交地址并生成单 HTML 文件。
-- `--type card`：校验钉钉卡片业务 JSON 和提交目标，注册对应的 Multica 回调路由，再由命令内部调用 DWS 发送卡片并返回投递结果。
+- `--type card`：校验钉钉卡片业务 JSON 和提交目标，尽力注册固定的 Multica 回调路由，再由命令内部调用 DWS 发送卡片并返回投递结果。
 
 Agent 不自行检查环境变量、不拼接额外 Shell 校验，也不直接调用 DWS。命令成功才能向用户报告产物已生成或卡片已发送。
 
@@ -82,7 +82,7 @@ Agent 不自行检查环境变量、不拼接额外 Shell 校验，也不直接�
 
 - `cardTemplateId` 使用已发布的模板 ID。
 - `outTrackId` 每次发送生成新值；`submissionId` 必须与其一致。
-- 不要生成 `callbackType` 或 `callbackRouteKey`。命令根据提交目标中的 `flowId` 生成稳定且独立的 route key，注册到 Multica 回调地址后再注入发送请求，Agent 不能传入或覆盖。
+- 不要生成 `callbackType` 或 `callbackRouteKey`。命令固定使用 `customer_feedback_aitable_prod_v1`，从提交目标提取 `flowId` 组装 Multica 回调地址，并在发送请求中注入固定 key；Agent 不能传入或覆盖。
 - `openSpaceId` 为 `dtv1.card//IM_ROBOT.<接收人userId>`。
 - `cardData.cardParamMap` 的所有值必须是字符串。
 - `title`、`iconUrl`、`reportUrl`、摘要、周期、客户、周次、收集人和时间来自上表。
@@ -114,16 +114,17 @@ python3 scripts/weekly_report_tool.py gen-card \
   --data "$CARD_DATA_JSON"
 ```
 
-命令依次执行外层 Schema、反序列化 `projectRows` Schema、跨字段关系、敏感字段和提交目标校验；随后使用显式 `--client-id` 和 `--client-secret` 参数注册 Multica 回调并发送卡片。只有回调注册地址与请求一致、顶层投递成功、`outTrackId` 一致、投递结果非空且每项成功时，命令才返回 `success: true`。
+命令依次执行外层 Schema、反序列化 `projectRows` Schema、跨字段关系、敏感字段和提交目标校验；随后使用显式 `--client-id` 和 `--client-secret` 参数，以 `forceUpdate: false` 尝试注册固定 callback key，再发送卡片。注册失败只记录在结果的 `callbackRegistration` 中，不阻塞发卡；卡片投递仍要求顶层成功、`outTrackId` 一致、投递结果非空且每项成功。
+
+固定 key 已存在时，命令不会覆盖平台上的注册地址；注册接口返回的原有地址可用于判断是否匹配，命令以 `callbackRegistration.status: existing` 和 `matchesRequestedUrl: false` 给出安全诊断。若修改了 `WEEKLY_FEEDBACK_SUBMIT_URL`，应核对该状态以及平台上固定 key 的实际目标；Agent 不因注册失败自行改用新 key。
 
 成功后回复用户：
 
 > 卡片已发送，请在钉钉中查收。
 
-任一步失败时直接报告命令的安全错误摘要，不声称已生成或已发送，也不要绕过校验后重试。
+校验、HTML 生成或卡片投递失败时直接报告命令的安全错误摘要，不声称已生成或已发送，也不要绕过校验后重试。仅 callback 注册失败是非阻塞诊断项。
 
 ## 协议变更记录
 
-- 2026-08-28：HTML 与 Ding Card 统一从 `WEEKLY_FEEDBACK_SUBMIT_URL` 获取提交目标；Ding Card 校验 AI 表格 flow webhook，按 flow ID 注册独立 Multica 回调后再发送，避免不同表格复用全局 key 时互相覆盖。
-- 2026-08-28：曾将卡片回调切换为单一正式路由 `customer_feedback_aitable_prod_v1`；现已由按 flow ID 注册的独立 Multica 路由取代。
+- 2026-08-28：HTML 与 Ding Card 统一从 `WEEKLY_FEEDBACK_SUBMIT_URL` 获取提交目标；Ding Card 从 URL 提取 `flowId` 组装 Multica 地址，但固定复用 `customer_feedback_aitable_prod_v1`，以 `forceUpdate: false` 尽力注册且不因注册失败阻塞发卡。原因：只维护一个 callback ID，并避免命令覆盖平台已有配置。
 - 2026-08-27：从 Agent 输入中移除 `callbackType`、`callbackRouteKey`，改由命令固定注入已注册路由，避免调用方覆盖卡片回调目标。

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import os
 import subprocess
 import sys
@@ -22,10 +21,7 @@ MULTICA_CALLBACK_URL = (
     "https://fde-workbench.dingtalk.com/api/dingtalk/card/customer-feedback/"
     + AITABLE_FLOW_ID
 )
-CALLBACK_ROUTE_KEY = (
-    "customer_feedback_multica_"
-    + hashlib.sha256(AITABLE_FLOW_ID.encode("ascii")).hexdigest()[:20]
-)
+CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
 
 
 def html_data() -> dict:
@@ -94,10 +90,12 @@ records.append({"argv": sys.argv[1:], "stdin": sys.stdin.read()})
 record_path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
 if "/v1.0/card/callbacks/register" in sys.argv:
     sys.stdout.write(os.environ.get("FAKE_DWS_REGISTER_STDOUT", ""))
+    sys.stderr.write(os.environ.get("FAKE_DWS_REGISTER_STDERR", ""))
+    raise SystemExit(int(os.environ.get("FAKE_DWS_REGISTER_EXIT", "0")))
 else:
     sys.stdout.write(os.environ.get("FAKE_DWS_STDOUT", ""))
-sys.stderr.write(os.environ.get("FAKE_DWS_STDERR", ""))
-raise SystemExit(int(os.environ.get("FAKE_DWS_EXIT", "0")))
+    sys.stderr.write(os.environ.get("FAKE_DWS_STDERR", ""))
+    raise SystemExit(int(os.environ.get("FAKE_DWS_EXIT", "0")))
 """,
         encoding="utf-8",
     )
@@ -124,6 +122,9 @@ def command_environment(
     legacy_dws: bool = False,
     fake_dws_dir: Path | None = None,
     fake_response: dict | str | None = None,
+    fake_register_response: dict | str | None = None,
+    fake_register_exit: int = 0,
+    fake_register_stderr: str = "",
     fake_exit: int = 0,
     fake_stderr: str = "",
     record_path: Path | None = None,
@@ -138,6 +139,8 @@ def command_environment(
         "FAKE_DWS_RECORD",
         "FAKE_DWS_STDOUT",
         "FAKE_DWS_REGISTER_STDOUT",
+        "FAKE_DWS_REGISTER_STDERR",
+        "FAKE_DWS_REGISTER_EXIT",
         "FAKE_DWS_STDERR",
         "FAKE_DWS_EXIT",
     ):
@@ -160,13 +163,19 @@ def command_environment(
             if isinstance(fake_response, str)
             else json.dumps(fake_response, ensure_ascii=False)
         )
-    environment["FAKE_DWS_REGISTER_STDOUT"] = json.dumps(
-        {
+    register_response = fake_register_response
+    if register_response is None:
+        register_response = {
             "success": True,
             "result": {"callbackUrl": MULTICA_CALLBACK_URL},
-        },
-        ensure_ascii=False,
+        }
+    environment["FAKE_DWS_REGISTER_STDOUT"] = (
+        register_response
+        if isinstance(register_response, str)
+        else json.dumps(register_response, ensure_ascii=False)
     )
+    environment["FAKE_DWS_REGISTER_EXIT"] = str(fake_register_exit)
+    environment["FAKE_DWS_REGISTER_STDERR"] = fake_register_stderr
     environment["FAKE_DWS_EXIT"] = str(fake_exit)
     environment["FAKE_DWS_STDERR"] = fake_stderr
     return environment
@@ -274,6 +283,9 @@ class DingCardDeliveryTests(unittest.TestCase):
         ddws: bool = True,
         legacy_dws: bool = False,
         response: dict | str | None = None,
+        register_response: dict | str | None = None,
+        register_exit_code: int = 0,
+        register_stderr: str = "",
         exit_code: int = 0,
         stderr: str = "",
         submit_url: str | None = AITABLE_WEBHOOK_URL,
@@ -293,6 +305,9 @@ class DingCardDeliveryTests(unittest.TestCase):
                 legacy_dws=legacy_dws,
                 fake_dws_dir=directory,
                 fake_response=response,
+                fake_register_response=register_response,
+                fake_register_exit=register_exit_code,
+                fake_register_stderr=register_stderr,
                 fake_exit=exit_code,
                 fake_stderr=stderr,
                 record_path=record,
@@ -370,7 +385,7 @@ class DingCardDeliveryTests(unittest.TestCase):
             {
                 "callbackRouteKey": CALLBACK_ROUTE_KEY,
                 "callbackUrl": MULTICA_CALLBACK_URL,
-                "forceUpdate": True,
+                "forceUpdate": False,
             },
         )
         delivered_payload = json.loads(deliver["stdin"])
@@ -467,7 +482,89 @@ class DingCardDeliveryTests(unittest.TestCase):
         self.assertEqual(command_result["projectCount"], 3)
         self.assertEqual(command_result["callbackRouteKey"], CALLBACK_ROUTE_KEY)
         self.assertEqual(command_result["callbackUrl"], MULTICA_CALLBACK_URL)
+        self.assertEqual(
+            command_result["callbackRegistration"],
+            {"attempted": True, "success": True, "status": "registered"},
+        )
         self.assertEqual(command_result["dwsResponse"], response)
+
+    def test_card_continues_delivery_when_callback_registration_fails(self) -> None:
+        payload = card_payload()
+        response = success_response(payload)
+        result, record_path = self.run_with_fake_dws(
+            payload,
+            response=response,
+            register_exit_code=7,
+            register_stderr="registration failed with ddws-client-secret",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(records), 2)
+        self.assertEqual(
+            records[1]["argv"][:3],
+            ["api", "POST", "/v1.0/card/instances/createAndDeliver"],
+        )
+        command_result = json.loads(result.stdout)
+        self.assertEqual(
+            command_result["callbackRegistration"],
+            {"attempted": True, "success": False, "status": "failed"},
+        )
+        self.assertNotIn("ddws-client-secret", result.stdout)
+
+    def test_card_reports_existing_callback_without_overwriting_or_blocking(self) -> None:
+        payload = card_payload()
+        existing_url = "https://callback.example.com/existing"
+        result, record_path = self.run_with_fake_dws(
+            payload,
+            response=success_response(payload),
+            register_response={
+                "success": True,
+                "result": {"callbackUrl": existing_url},
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(records[0]["stdin"])["forceUpdate"], False)
+        command_result = json.loads(result.stdout)
+        self.assertEqual(
+            command_result["callbackRegistration"],
+            {
+                "attempted": True,
+                "success": True,
+                "status": "existing",
+                "matchesRequestedUrl": False,
+            },
+        )
+
+    def test_card_reuses_one_callback_key_for_a_different_flow(self) -> None:
+        payload = card_payload()
+        other_flow_id = "another_flow_123"
+        other_submit_url = (
+            "https://connector.dingtalk.com/webhook/flow/" + other_flow_id
+        )
+        other_callback_url = (
+            "https://fde-workbench.dingtalk.com/api/dingtalk/card/"
+            "customer-feedback/" + other_flow_id
+        )
+        result, record_path = self.run_with_fake_dws(
+            payload,
+            response=success_response(payload),
+            submit_url=other_submit_url,
+            register_response={
+                "success": True,
+                "result": {"callbackUrl": other_callback_url},
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = json.loads(record_path.read_text(encoding="utf-8"))
+        registered_payload = json.loads(records[0]["stdin"])
+        delivered_payload = json.loads(records[1]["stdin"])
+        self.assertEqual(registered_payload["callbackRouteKey"], CALLBACK_ROUTE_KEY)
+        self.assertEqual(registered_payload["callbackUrl"], other_callback_url)
+        self.assertEqual(delivered_payload["callbackRouteKey"], CALLBACK_ROUTE_KEY)
 
     def test_card_rejects_output_argument(self) -> None:
         payload = card_payload()

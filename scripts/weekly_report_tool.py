@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -35,7 +34,7 @@ AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
 MULTICA_CALLBACK_BASE_URL = (
     "https://fde-workbench.dingtalk.com/api/dingtalk/card/customer-feedback/"
 )
-CALLBACK_ROUTE_KEY_PREFIX = "customer_feedback_multica_"
+CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
@@ -187,10 +186,9 @@ def build_callback_config(aitable_webhook_url: str) -> dict[str, str]:
             f"{SUBMIT_URL_ENV} flowId must contain 1-128 letters, digits, "
             "underscores, or hyphens"
         )
-    route_digest = hashlib.sha256(flow_id.encode("ascii")).hexdigest()[:20]
     return {
         "flowId": flow_id,
-        "callbackRouteKey": CALLBACK_ROUTE_KEY_PREFIX + route_digest,
+        "callbackRouteKey": CALLBACK_ROUTE_KEY,
         "callbackUrl": MULTICA_CALLBACK_BASE_URL + flow_id,
     }
 
@@ -483,24 +481,37 @@ def run_dws_api(
     return parse_dws_response(completed.stdout)
 
 
-def register_callback(
+def attempt_callback_registration(
     callback_config: dict[str, str], credentials: dict[str, str]
-) -> None:
+) -> dict[str, Any]:
     callback_url = callback_config["callbackUrl"]
-    response = run_dws_api(
-        DWS_CALLBACK_REGISTER_ENDPOINT,
-        {
-            "callbackRouteKey": callback_config["callbackRouteKey"],
-            "callbackUrl": callback_url,
-            "forceUpdate": True,
-        },
-        credentials,
-    )
+    try:
+        response = run_dws_api(
+            DWS_CALLBACK_REGISTER_ENDPOINT,
+            {
+                "callbackRouteKey": callback_config["callbackRouteKey"],
+                "callbackUrl": callback_url,
+                "forceUpdate": False,
+            },
+            credentials,
+        )
+    except ToolError:
+        return {"attempted": True, "success": False, "status": "failed"}
     if response.get("success") is not True:
-        raise ToolError("DWS callback registration returned success=false")
+        return {"attempted": True, "success": False, "status": "failed"}
     result = response.get("result")
-    if not isinstance(result, dict) or result.get("callbackUrl") != callback_url:
-        raise ToolError("DWS callback registration result does not match request")
+    if not isinstance(result, dict) or not isinstance(
+        result.get("callbackUrl"), str
+    ):
+        return {"attempted": True, "success": False, "status": "failed"}
+    if result["callbackUrl"] != callback_url:
+        return {
+            "attempted": True,
+            "success": True,
+            "status": "existing",
+            "matchesRequestedUrl": False,
+        }
+    return {"attempted": True, "success": True, "status": "registered"}
 
 
 def gen_ding_card(
@@ -508,7 +519,7 @@ def gen_ding_card(
     credentials: dict[str, str],
     callback_config: dict[str, str],
 ) -> dict[str, Any]:
-    register_callback(callback_config, credentials)
+    registration = attempt_callback_registration(callback_config, credentials)
     request_payload = {
         **data,
         "callbackType": CALLBACK_TYPE,
@@ -525,6 +536,7 @@ def gen_ding_card(
         "projectCount": project_count,
         "callbackRouteKey": callback_config["callbackRouteKey"],
         "callbackUrl": callback_config["callbackUrl"],
+        "callbackRegistration": registration,
         "dwsResponse": response,
     }
 

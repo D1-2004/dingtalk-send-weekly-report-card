@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import quote
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -50,6 +51,23 @@ def html_data() -> dict:
         "submissionId": "wf-1787690400000-a1b2",
         "callbackHeaders": {},
         "formDisabled": False,
+    }
+
+
+def markdown_data() -> dict:
+    return {
+        "schemaVersion": 1,
+        "title": "维信诺项目周报回访",
+        "reportPeriod": "2026年3月31日—2026年4月10日",
+        "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+        "reportLinkText": "查看本周服务报告",
+        "summaryMarkdown": [
+            "新增需求 **11** 项，其中 **2** 项已完成",
+            "当前 **6** 个工单处理中，**2** 个已关闭",
+        ],
+        "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/feedback-example/",
+        "feedbackLinkText": "填写本周反馈",
+        "recipientName": "辰驷",
     }
 
 
@@ -182,22 +200,17 @@ def command_environment(
 
 
 def run_gen_card(
-    card_type: str,
+    card_type: str | None,
     data: dict,
     *,
     environment: dict[str, str],
     output: Path | None = None,
     extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    command = [
-        sys.executable,
-        str(TOOL),
-        "gen-card",
-        "--type",
-        card_type,
-        "--data",
-        json.dumps(data, ensure_ascii=False),
-    ]
+    command = [sys.executable, str(TOOL), "gen-card"]
+    if card_type is not None:
+        command.extend(["--type", card_type])
+    command.extend(["--data", json.dumps(data, ensure_ascii=False)])
     if output is not None:
         command.extend(["--output", str(output)])
     command.extend(extra_args or [])
@@ -229,12 +242,15 @@ class SimplifiedSkillTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertNotIn("变更历史", skill)
+        self.assertNotIn("协议变更记录", skill)
         self.assertNotIn("变更历史", template)
         self.assertNotIn("dws api", skill)
         self.assertNotIn("dws doc", skill)
         self.assertIn("## 功能", skill)
         self.assertIn("## 参数规格与来源", skill)
         self.assertIn("## 命令使用", skill)
+        self.assertIn("Markdown", skill)
+        self.assertIn("prepare_static_site_deploy", skill)
 
     def test_agent_prompt_only_calls_gen_card(self) -> None:
         prompt = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
@@ -245,24 +261,57 @@ class SimplifiedSkillTests(unittest.TestCase):
 
 class HtmlGenerationTests(unittest.TestCase):
     def test_html_injects_submit_url_and_returns_output(self) -> None:
-        submit_url = "https://weekly-feedback.example.com/html-submit"
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "generated" / "feedback.html"
             result = run_gen_card(
                 "html",
                 html_data(),
                 output=output,
-                environment=command_environment(submit_url=submit_url),
+                environment=command_environment(submit_url=AITABLE_WEBHOOK_URL),
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             command_result = json.loads(result.stdout)
             generated_data = extract_html_data(output)
+            generated_html = output.read_text(encoding="utf-8")
+            identity_runtime = output.parent / "dingtalk-identity.js"
+            feedback_runtime = output.parent / "weekly-feedback-runtime.js"
+            proxy_config = output.parent / "multica-fetch-proxy-config.js"
+            identity_runtime_exists = identity_runtime.exists()
+            feedback_runtime_exists = feedback_runtime.exists()
+            proxy_config_exists = proxy_config.exists()
+            identity_runtime_text = identity_runtime.read_text(encoding="utf-8")
+            feedback_runtime_text = feedback_runtime.read_text(encoding="utf-8")
+            proxy_config_text = proxy_config.read_text(encoding="utf-8")
 
         self.assertEqual(command_result["success"], True)
         self.assertEqual(command_result["type"], "html")
         self.assertEqual(command_result["output"], str(output.resolve()))
-        self.assertEqual(generated_data["callbackUrl"], submit_url)
+        self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
+        self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)
+        self.assertTrue(identity_runtime_exists)
+        self.assertTrue(feedback_runtime_exists)
+        self.assertTrue(proxy_config_exists)
+        self.assertIn("multica-fetch-proxy-config.js", generated_html)
+        self.assertIn("dingtalk-identity.js", generated_html)
+        self.assertIn("weekly-feedback-runtime.js", generated_html)
+        self.assertLess(
+            generated_html.index("multica-fetch-proxy-config.js"),
+            generated_html.index("weekly-feedback-runtime.js"),
+        )
+        self.assertIn(
+            "internal.user.getCurrentUserInfo",
+            identity_runtime_text,
+        )
+        self.assertIn("feedbackUser", feedback_runtime_text)
+        self.assertNotIn(
+            "__MULTICA_FETCH_PROXY_ALLOWLIST__", feedback_runtime_text
+        )
+        self.assertEqual(
+            proxy_config_text,
+            "window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = "
+            f"{json.dumps([AITABLE_WEBHOOK_URL], ensure_ascii=False)};\n",
+        )
 
     def test_html_requires_output_and_submit_url(self) -> None:
         result = run_gen_card(
@@ -273,6 +322,81 @@ class HtmlGenerationTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("--output", result.stderr)
+
+
+class MarkdownDeliveryTests(unittest.TestCase):
+    def test_markdown_is_default_and_sends_rendered_template(self) -> None:
+        data = markdown_data()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            make_fake_dws(directory)
+            record = directory / "record.json"
+            result = run_gen_card(
+                None,
+                data,
+                environment=command_environment(
+                    fake_dws_dir=directory,
+                    fake_response={
+                        "success": True,
+                        "result": {"openTaskId": "markdown-task-1"},
+                    },
+                    record_path=record,
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            command_result = json.loads(result.stdout)
+            records = json.loads(record.read_text(encoding="utf-8"))
+
+        self.assertEqual(len(records), 1)
+        argv = records[0]["argv"]
+        self.assertEqual(argv[:2], ["chat", "+dm"])
+        self.assertNotIn("api", argv)
+        self.assertNotIn("--client-id", argv)
+        self.assertNotIn("--client-secret", argv)
+        self.assertEqual(argv[argv.index("--to") + 1], "辰驷")
+        self.assertIn("--yes", argv)
+        self.assertEqual(argv[argv.index("--format") + 1], "json")
+        markdown = argv[argv.index("--content") + 1]
+        self.assertEqual(records[0]["stdin"], "")
+        self.assertLess(markdown.index(data["title"]), markdown.index(data["reportPeriod"]))
+        self.assertLess(markdown.index(data["reportPeriod"]), markdown.index(data["reportUrl"]))
+        self.assertLess(markdown.index(data["reportUrl"]), markdown.index(data["summaryMarkdown"][0]))
+        feedback_deep_link = (
+            "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
+            + quote(data["feedbackUrl"], safe="")
+        )
+        self.assertLess(
+            markdown.index(data["summaryMarkdown"][0]),
+            markdown.index(feedback_deep_link),
+        )
+        self.assertEqual(command_result["success"], True)
+        self.assertEqual(command_result["type"], "markdown")
+        self.assertEqual(command_result["recipientName"], "辰驷")
+        self.assertEqual(command_result["markdown"], markdown)
+        self.assertEqual(command_result["feedbackDeepLink"], feedback_deep_link)
+
+    def test_markdown_validates_feedback_url_before_invoking_dws(self) -> None:
+        data = markdown_data()
+        data.pop("feedbackUrl")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            make_fake_dws(directory)
+            record = directory / "record.json"
+            result = run_gen_card(
+                "markdown",
+                data,
+                environment=command_environment(
+                    ddws=True,
+                    fake_dws_dir=directory,
+                    fake_response={"success": True, "result": {}},
+                    record_path=record,
+                ),
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("feedbackUrl", result.stderr)
+        self.assertFalse(record.exists())
 
 
 class DingCardDeliveryTests(unittest.TestCase):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate validated HTML or DingTalk weekly-feedback cards."""
+"""Generate validated Markdown, HTML, or DingTalk weekly-feedback cards."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from string import Template
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 try:
     from jsonschema import Draft202012Validator
@@ -22,6 +24,8 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 DEFAULT_TEMPLATE = ASSET_DIR / "weekly-feedback-template.html"
+HTML_RUNTIME_ASSETS = ("dingtalk-identity.js", "weekly-feedback-runtime.js")
+FETCH_PROXY_CONFIG_ASSET = "multica-fetch-proxy-config.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyReportCardData">'
 DATA_BLOCK_END = "</script>"
 MAX_PARAM_KEY_BYTES = 100
@@ -31,11 +35,24 @@ DWS_CALLBACK_REGISTER_ENDPOINT = "/v1.0/card/callbacks/register"
 CALLBACK_TYPE = "HTTP"
 AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
 AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
+MULTICA_CALLBACK_PATH_PREFIX = "/api/dingtalk/card/customer-feedback/"
 MULTICA_CALLBACK_BASE_URL = (
-    "https://fde-workbench.dingtalk.com/api/dingtalk/card/customer-feedback/"
+    "https://fde-workbench.dingtalk.com" + MULTICA_CALLBACK_PATH_PREFIX
 )
 CALLBACK_ROUTE_KEY = "customer_feedback_aitable_prod_v1"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+MARKDOWN_TEMPLATE = Template(
+    """### $title
+> 周期：$report_period
+
+[$report_link_text]($report_url)
+
+$summary
+
+---
+
+[👉 $feedback_link_text]($feedback_url)"""
+)
 FORBIDDEN_NORMALIZED_KEYS = {
     "accesstoken",
     "appkey",
@@ -206,6 +223,21 @@ def validate_html_card_data(data: dict[str, Any]) -> None:
         )
 
 
+def validate_markdown_data(data: dict[str, Any]) -> None:
+    try:
+        errors = iter_schema_errors(
+            data, "weekly-report-markdown-data.schema.json"
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ToolError(f"cannot load Markdown data schema: {error}") from error
+    if errors:
+        error = errors[0]
+        raise ToolError(
+            f"--data failed Markdown schema validation at "
+            f"{schema_error_path(error)}: {error.message}"
+        )
+
+
 def replace_data_block(template: str, data: dict[str, Any]) -> str:
     start_tag_index = template.find(DATA_BLOCK_START)
     if start_tag_index < 0:
@@ -252,12 +284,55 @@ def gen_html_card(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
     output_path = write_output(args.output, replace_data_block(template, data))
+    proxy_config_path = output_path.parent / FETCH_PROXY_CONFIG_ASSET
+    proxy_config = (
+        "window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = "
+        + json.dumps([submit_url], ensure_ascii=False)
+        + ";\n"
+    )
+    try:
+        proxy_config_path.write_text(proxy_config, encoding="utf-8")
+    except (OSError, ValueError) as error:
+        raise ToolError(
+            f"cannot write HTML runtime asset {FETCH_PROXY_CONFIG_ASSET}: {error}"
+        ) from error
+    runtime_outputs: list[str] = [str(proxy_config_path.resolve())]
+    for filename in HTML_RUNTIME_ASSETS:
+        source = ASSET_DIR / filename
+        target = output_path.parent / filename
+        try:
+            shutil.copyfile(source, target)
+        except (OSError, ValueError) as error:
+            raise ToolError(f"cannot copy HTML runtime asset {filename}: {error}") from error
+        runtime_outputs.append(str(target.resolve()))
     return {
         "success": True,
         "type": "html",
         "output": str(output_path.resolve()),
+        "assets": runtime_outputs,
+        "siteRoot": str(output_path.parent.resolve()),
         "submitUrl": submit_url,
     }
+
+
+def build_dingtalk_workbench_link(url: str) -> str:
+    return (
+        "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
+        + quote(url, safe="")
+    )
+
+
+def render_markdown(data: dict[str, Any]) -> str:
+    summary = "\n".join(f"- {line}" for line in data["summaryMarkdown"])
+    return MARKDOWN_TEMPLATE.substitute(
+        title=data["title"],
+        report_period=data["reportPeriod"],
+        report_link_text=data.get("reportLinkText", "查看周报详情"),
+        report_url=data["reportUrl"],
+        summary=summary,
+        feedback_link_text=data.get("feedbackLinkText", "填写反馈"),
+        feedback_url=build_dingtalk_workbench_link(data["feedbackUrl"]),
+    )
 
 
 def parse_json_string(value: Any, field_name: str, errors: list[str]) -> Any:
@@ -382,19 +457,25 @@ def validate_generation_parameters(
     dict[str, str] | None,
     dict[str, str] | None,
 ]:
-    if args.type == "card" and args.template is not None:
+    if args.type != "html" and args.template is not None:
         raise ToolError("--template is only valid with --type html")
-    if args.type == "card" and args.output is not None:
+    if args.type != "html" and args.output is not None:
         raise ToolError("--output is only valid with --type html")
     if args.type == "html" and args.output is None:
         raise ToolError("--output is required with --type html")
     data = parse_inline_data(args.data)
-    submit_url = require_submit_url()
     if args.type == "html":
-        data["callbackUrl"] = submit_url
+        aitable_webhook_url = require_submit_url()
+        build_callback_config(aitable_webhook_url)
+        data["callbackUrl"] = aitable_webhook_url
         validate_html_card_data(data)
-        return data, submit_url, None, None
+        return data, aitable_webhook_url, None, None
 
+    if args.type == "markdown":
+        validate_markdown_data(data)
+        return data, None, None, None
+
+    submit_url = require_submit_url()
     callback_config = build_callback_config(submit_url)
 
     missing = [
@@ -541,12 +622,64 @@ def gen_ding_card(
     }
 
 
+def run_dws_dm(recipient_name: str, content: str) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            [
+                "dws",
+                "chat",
+                "+dm",
+                "--to",
+                recipient_name,
+                "--content",
+                content,
+                "--yes",
+                "--format",
+                "json",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise ToolError("dws command not found") from error
+    except OSError as error:
+        raise ToolError("cannot execute dws command") from error
+    if completed.returncode != 0:
+        detail = completed.stderr.strip()
+        suffix = f": {detail[:1000]}" if detail else ""
+        raise ToolError(
+            f"DWS chat command failed with exit code {completed.returncode}{suffix}"
+        )
+    response = parse_dws_response(completed.stdout)
+    if response.get("success") is False or response.get("ok") is False:
+        raise ToolError("DWS chat returned an unsuccessful result")
+    return response
+
+
+def gen_markdown_card(data: dict[str, Any]) -> dict[str, Any]:
+    markdown = render_markdown(data)
+    feedback_deep_link = build_dingtalk_workbench_link(data["feedbackUrl"])
+    response = run_dws_dm(data["recipientName"], markdown)
+    return {
+        "success": True,
+        "type": "markdown",
+        "recipientName": data["recipientName"],
+        "markdown": markdown,
+        "feedbackUrl": data["feedbackUrl"],
+        "feedbackDeepLink": feedback_deep_link,
+        "dwsResponse": response,
+    }
+
+
 def generate_card(args: argparse.Namespace) -> int:
     data, submit_url, credentials, callback_config = validate_generation_parameters(
         args
     )
     if args.type == "html":
         result = gen_html_card(args, data, submit_url or "")
+    elif args.type == "markdown":
+        result = gen_markdown_card(data)
     else:
         result = gen_ding_card(
             data,
@@ -560,14 +693,21 @@ def generate_card(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="weekly_report_tool",
-        description="Generate a validated HTML or DingTalk weekly-feedback card.",
+        description=(
+            "Generate a validated Markdown, HTML, or DingTalk weekly-feedback card."
+        ),
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     generate = subcommands.add_parser(
-        "gen-card", help="Generate an HTML or DingTalk card from strict JSON data."
+        "gen-card",
+        help="Generate a Markdown, HTML, or DingTalk card from strict JSON data.",
     )
-    generate.add_argument("--type", choices=("html", "card"), required=True)
+    generate.add_argument(
+        "--type",
+        choices=("markdown", "html", "card"),
+        default="markdown",
+    )
     generate.add_argument(
         "--template",
         help="HTML template path; valid only with --type html.",

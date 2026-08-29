@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/weekly-report-markdown-data.json",
+  "title": "Weekly report Markdown delivery data",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "title",
+    "reportPeriod",
+    "reportUrl",
+    "summaryMarkdown",
+    "feedbackUrl",
+    "recipientName"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "reportPeriod": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "reportUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https?://"
+    },
+    "reportLinkText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "summaryMarkdown": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "feedbackUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https?://"
+    },
+    "feedbackLinkText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "recipientName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    }
+  },
+  "additionalProperties": false
+}

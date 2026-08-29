@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "title": "维信诺项目周报回访",
+  "reportPeriod": "2026年3月31日—2026年4月10日",
+  "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+  "reportLinkText": "查看本周服务报告",
+  "summaryMarkdown": [
+    "新增需求 **11** 项，其中 **2** 项已完成",
+    "当前 **6** 个工单处理中，**2** 个已关闭",
+    "重点跟进文档协作与数据看板性能"
+  ],
+  "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/example-feedback/",
+  "feedbackLinkText": "填写本周反馈",
+  "recipientName": "辰驷"
+}

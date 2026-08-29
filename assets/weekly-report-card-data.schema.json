@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/schemas/weekly-report-card-data.json",
-  "title": "Standalone weekly feedback HTML card data",
+  "$id": "https://example.local/schemas/weekly-feedback-form-data-v2.json",
+  "title": "Weekly feedback web form data v2",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "iconUrl": {
       "type": "string",
@@ -58,6 +58,26 @@
       "items": {
         "$ref": "#/$defs/project"
       }
+    },
+    "satisfaction": {
+      "enum": [
+        "",
+        "满意",
+        "不满意"
+      ]
+    },
+    "dissatisfactionReasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      }
+    },
+    "feedback": {
+      "type": "string",
+      "maxLength": 1000
     },
     "dissatisfactionOptions": {
       "type": "array",
@@ -131,59 +151,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 100
-        },
-        "satisfaction": {
-          "enum": [
-            "",
-            "满意",
-            "不满意"
-          ]
-        },
-        "reasons": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 50
-          }
-        },
-        "feedback": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "reasonOptions": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/reasonOption"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "reasonOption": {
-      "type": "object",
-      "required": [
-        "value"
-      ],
-      "properties": {
-        "value": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 50
-        },
-        "text": {
-          "type": "object",
-          "properties": {
-            "zh_CN": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 50
-            }
-          },
-          "additionalProperties": false
         }
       },
       "additionalProperties": false

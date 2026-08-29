@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "iconUrl": "https://img.alicdn.com/example.png",
   "title": "维信诺项目周报回访",
   "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
@@ -11,19 +11,16 @@
   "projects": [
     {
       "id": "p1",
-      "name": "智能助理项目",
-      "satisfaction": "",
-      "reasons": [],
-      "feedback": ""
+      "name": "智能助理项目"
     },
     {
       "id": "p2",
-      "name": "数据看板项目",
-      "satisfaction": "",
-      "reasons": [],
-      "feedback": ""
+      "name": "数据看板项目"
     }
   ],
+  "satisfaction": "",
+  "dissatisfactionReasons": [],
+  "feedback": "",
   "dissatisfactionOptions": [
     "响应不及时",
     "问题未解决",

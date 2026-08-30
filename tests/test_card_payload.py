@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -58,7 +59,7 @@ def markdown_data() -> dict:
             "新增需求 **11** 项，其中 **2** 项已完成",
             "当前 **6** 个工单处理中，**2** 个已关闭",
         ],
-        "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/feedback-example/",
+        "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/feedback-example",
         "feedbackLinkText": "填写本周反馈",
         "recipientName": "辰驷",
     }
@@ -195,6 +196,7 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertNotIn("weekly-feedback-runtime.js", skill)
         self.assertIn("index.html", skill)
         self.assertIn("完整构建产物", skill)
+        self.assertIn("## 历史记录", skill)
 
     def test_only_asset_schema_describes_webhook_payload(self) -> None:
         schema_path = SKILL_DIR / "assets" / "weekly-feedback-webhook.schema.json"
@@ -243,6 +245,9 @@ class HtmlGenerationTests(unittest.TestCase):
             command_result = json.loads(result.stdout)
             generated_data = extract_html_data(output)
             generated_html = output.read_text(encoding="utf-8")
+            generated_runtime = (output.parent / "weekly-feedback-app.js").read_text(
+                encoding="utf-8"
+            )
             generated_files = sorted(
                 path.name for path in output.parent.iterdir() if path.is_file()
             )
@@ -250,28 +255,50 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertEqual(command_result["success"], True)
         self.assertEqual(command_result["type"], "html")
         self.assertEqual(command_result["output"], str(output.resolve()))
+        self.assertEqual(
+            command_result["runtimeOutput"],
+            str((output.parent / "weekly-feedback-app.js").resolve()),
+        )
+        self.assertEqual(
+            command_result["siteFiles"],
+            ["feedback.html", "weekly-feedback-app.js"],
+        )
         self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
         self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)
-        self.assertEqual(generated_files, ["feedback.html"])
-        self.assertNotIn("<script src=", generated_html)
-        self.assertIn("window.__MULTICA_FETCH_PROXY_ALLOWLIST__", generated_html)
-        self.assertNotIn("__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__", generated_html)
+        self.assertEqual(
+            generated_files,
+            ["feedback.html", "weekly-feedback-app.js"],
+        )
         self.assertIn(
-            "internal.user.getCurrentUserInfo",
+            '<script src="./weekly-feedback-app.js"></script>',
             generated_html,
         )
-        self.assertIn("feedbackUser", generated_html)
-        self.assertIn("dissatisfactionReasons", generated_html)
-        self.assertIn("feedback: state.feedback", generated_html)
-        self.assertNotIn("projectRows", generated_html)
-        self.assertNotIn("projectRowsJson", generated_html)
-        self.assertNotIn("feedbackDialog", generated_html)
+        executable_inline_scripts = re.findall(
+            r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>',
+            generated_html,
+            flags=re.IGNORECASE,
+        )
+        self.assertEqual(executable_inline_scripts, [])
+        self.assertNotIn("window.__MULTICA_FETCH_PROXY_ALLOWLIST__", generated_html)
+        self.assertIn("window.__MULTICA_FETCH_PROXY_ALLOWLIST__", generated_runtime)
+        self.assertNotIn("__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__", generated_html)
+        self.assertNotIn("__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__", generated_runtime)
+        self.assertIn(
+            "internal.user.getCurrentUserInfo",
+            generated_runtime,
+        )
+        self.assertIn("feedbackUser", generated_runtime)
+        self.assertIn("dissatisfactionReasons", generated_runtime)
+        self.assertIn("feedback: state.feedback", generated_runtime)
+        self.assertNotIn("projectRows", generated_runtime)
+        self.assertNotIn("projectRowsJson", generated_runtime)
+        self.assertNotIn("feedbackDialog", generated_runtime)
         self.assertIn('id="customerName"', generated_html)
         self.assertIn('id="projectNames"', generated_html)
         self.assertIn('id="satisfactionOptions"', generated_html)
         self.assertIn('id="dissatisfactionReasons"', generated_html)
         self.assertIn('id="feedbackInput"', generated_html)
-        self.assertIn(json.dumps([AITABLE_WEBHOOK_URL]), generated_html)
+        self.assertIn(json.dumps([AITABLE_WEBHOOK_URL]), generated_runtime)
 
     def test_html_requires_output_and_submit_url(self) -> None:
         result = run_gen_card(
@@ -332,9 +359,10 @@ class MarkdownDeliveryTests(unittest.TestCase):
         self.assertLess(markdown.index(data["title"]), markdown.index(data["reportPeriod"]))
         self.assertLess(markdown.index(data["reportPeriod"]), markdown.index(data["reportUrl"]))
         self.assertLess(markdown.index(data["reportUrl"]), markdown.index(data["summaryMarkdown"][0]))
+        normalized_feedback_url = data["feedbackUrl"] + "/"
         feedback_deep_link = (
             "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
-            + quote(data["feedbackUrl"], safe="")
+            + quote(normalized_feedback_url, safe="")
         )
         self.assertLess(
             markdown.index(data["summaryMarkdown"][0]),
@@ -344,6 +372,7 @@ class MarkdownDeliveryTests(unittest.TestCase):
         self.assertEqual(command_result["type"], "markdown")
         self.assertEqual(command_result["recipientName"], "辰驷")
         self.assertEqual(command_result["markdown"], markdown)
+        self.assertEqual(command_result["feedbackUrl"], normalized_feedback_url)
         self.assertEqual(command_result["feedbackDeepLink"], feedback_deep_link)
 
     def test_markdown_validates_feedback_url_before_invoking_dws(self) -> None:

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from string import Template
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 
 try:
     from jsonschema import Draft202012Validator
@@ -22,12 +22,31 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 DEFAULT_TEMPLATE = ASSET_DIR / "weekly-feedback-template.html"
+HTML_RUNTIME_FILENAME = "weekly-feedback-app.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyFeedbackFormData">'
 DATA_BLOCK_END = "</script>"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
 AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+MULTICA_SITE_ROOT_PATTERN = re.compile(r"^/sites/[^/]+$")
+SCRIPT_BLOCK_PATTERN = re.compile(
+    r"(?P<indent>^[ \t]*)<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>",
+    flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+SCRIPT_SRC_PATTERN = re.compile(r"\bsrc\s*=", flags=re.IGNORECASE)
+SCRIPT_TYPE_PATTERN = re.compile(
+    r"\btype\s*=\s*(['\"])(?P<value>.*?)\1",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+EXECUTABLE_SCRIPT_TYPES = {
+    "",
+    "application/ecmascript",
+    "application/javascript",
+    "module",
+    "text/ecmascript",
+    "text/javascript",
+}
 MARKDOWN_TEMPLATE = Template(
     """### $title
 > 周期：$report_period
@@ -339,7 +358,7 @@ def write_output(output_value: str, content: str) -> Path:
     return output_path
 
 
-def inline_html_runtime(template: str, submit_url: str) -> str:
+def configure_html_runtime(template: str, submit_url: str) -> str:
     placeholder = "__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__"
     if template.count(placeholder) != 1:
         raise ToolError("template must contain one feedback proxy allowlist placeholder")
@@ -348,6 +367,48 @@ def inline_html_runtime(template: str, submit_url: str) -> str:
         json.dumps([submit_url], ensure_ascii=False),
         1,
     )
+
+
+def is_executable_inline_script(attrs: str) -> bool:
+    if SCRIPT_SRC_PATTERN.search(attrs):
+        return False
+    type_match = SCRIPT_TYPE_PATTERN.search(attrs)
+    script_type = type_match.group("value").strip().lower() if type_match else ""
+    return script_type in EXECUTABLE_SCRIPT_TYPES
+
+
+def externalize_html_runtime(html: str) -> tuple[str, str]:
+    runtime_parts: list[str] = []
+    runtime_tag_written = False
+
+    def replace_script(match: re.Match[str]) -> str:
+        nonlocal runtime_tag_written
+        if not is_executable_inline_script(match.group("attrs")):
+            return match.group(0)
+
+        runtime_parts.append(match.group("body").strip())
+        if runtime_tag_written:
+            return ""
+        runtime_tag_written = True
+        return (
+            f'{match.group("indent")}<script '
+            f'src="./{HTML_RUNTIME_FILENAME}"></script>'
+        )
+
+    externalized = SCRIPT_BLOCK_PATTERN.sub(replace_script, html)
+    if not runtime_parts:
+        raise ToolError("template does not contain executable inline JavaScript")
+
+    remaining_inline = [
+        match.group(0)
+        for match in SCRIPT_BLOCK_PATTERN.finditer(externalized)
+        if is_executable_inline_script(match.group("attrs"))
+    ]
+    if remaining_inline:
+        raise ToolError("generated HTML still contains executable inline JavaScript")
+
+    runtime = "\n\n".join(part for part in runtime_parts if part) + "\n"
+    return externalized, runtime
 
 
 def gen_html_card(
@@ -361,12 +422,27 @@ def gen_html_card(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
     rendered = replace_data_block(template, data)
-    output_path = write_output(args.output, inline_html_runtime(rendered, submit_url))
+    configured = configure_html_runtime(rendered, submit_url)
+    generated_html, generated_runtime = externalize_html_runtime(configured)
+
+    output_path = Path(args.output).expanduser()
+    if output_path.exists() and output_path.is_dir():
+        raise ToolError("--output must be a file path, not a directory")
+    if output_path.name == HTML_RUNTIME_FILENAME:
+        raise ToolError(
+            f"--output cannot use the reserved runtime filename "
+            f"{HTML_RUNTIME_FILENAME!r}"
+        )
+    runtime_path = output_path.parent / HTML_RUNTIME_FILENAME
+    write_output(str(runtime_path), generated_runtime)
+    output_path = write_output(str(output_path), generated_html)
     return {
         "success": True,
         "type": "html",
         "output": str(output_path.resolve()),
+        "runtimeOutput": str(runtime_path.resolve()),
         "siteRoot": str(output_path.parent.resolve()),
+        "siteFiles": [output_path.name, runtime_path.name],
         "submitUrl": submit_url,
     }
 
@@ -374,8 +450,15 @@ def gen_html_card(
 def build_dingtalk_workbench_link(url: str) -> str:
     return (
         "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
-        + quote(url, safe="")
+        + quote(normalize_hosted_site_url(url), safe="")
     )
+
+
+def normalize_hosted_site_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if MULTICA_SITE_ROOT_PATTERN.fullmatch(parsed.path):
+        parsed = parsed._replace(path=parsed.path + "/")
+    return urlunsplit(parsed)
 
 
 def render_markdown(data: dict[str, Any]) -> str:
@@ -459,14 +542,15 @@ def run_dws_dm(recipient_name: str, content: str) -> dict[str, Any]:
 
 def gen_markdown_card(data: dict[str, Any]) -> dict[str, Any]:
     markdown = render_markdown(data)
-    feedback_deep_link = build_dingtalk_workbench_link(data["feedbackUrl"])
+    feedback_url = normalize_hosted_site_url(data["feedbackUrl"])
+    feedback_deep_link = build_dingtalk_workbench_link(feedback_url)
     response = run_dws_dm(data["recipientName"], markdown)
     return {
         "success": True,
         "type": "markdown",
         "recipientName": data["recipientName"],
         "markdown": markdown,
-        "feedbackUrl": data["feedbackUrl"],
+        "feedbackUrl": feedback_url,
         "feedbackDeepLink": feedback_deep_link,
         "dwsResponse": response,
     }

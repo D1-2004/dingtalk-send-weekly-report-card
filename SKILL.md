@@ -18,14 +18,14 @@ scripts/weekly_report_tool.py gen-card
 命令支持：
 
 - `markdown`：默认类型，渲染并发送带周报链接和反馈入口的 Markdown 消息。
-- `html`：生成自包含的响应式网页表单，供 Multica Site 托管。
+- `html`：生成符合 Multica Site CSP 的响应式网页构建产物，供 Multica Site 托管。
 
 网页只收集一份整体反馈。客户和项目只读，用户填写一次满意度、不满意原因和具体反馈。提交给 Webhook 的数据协议见 `assets/weekly-feedback-webhook.schema.json`。
 
 ## 工作流
 
 1. 读取周报，根据下方参数规格构造 HTML 数据。
-2. 调用 `gen-card --type html`，默认将网站入口输出为构建目录下的 `index.html`。
+2. 调用 `gen-card --type html`，将网站入口输出为构建目录下的 `index.html`；命令同时生成页面依赖的同源 JavaScript 文件。
 3. 按 Multica Site 当前托管协议打包并上传完整构建产物 ZIP。ZIP 应保持构建产物的目录结构，并以根目录的 `index.html` 作为默认入口；不要假设或写死其他文件名。
 4. 使用 Multica MCP 的 `prepare_static_site_deploy` 准备上传，完成上传后调用 `get_static_site_deploy`，确认部署状态为 `active` 并取得 `site_url`。
 5. 将 `site_url` 写入 Markdown 数据的 `feedbackUrl`。
@@ -42,7 +42,7 @@ HTML 发布失败时，不发送缺少反馈入口或使用本地文件地址的
 | --- | --- | --- | --- |
 | `--type` | 可省略 | 必填 `html` | 可选值为 `markdown`、`html`；默认 `markdown` |
 | `--data` | 必填 | 必填 | 严格 JSON 对象，不接受 Python 字面量 |
-| `--output` | 禁止 | 必填 | HTML 输出文件；支持相对路径、绝对路径和 `~`，托管时建议使用 `{siteRoot}/index.html` |
+| `--output` | 禁止 | 必填 | HTML 入口文件；支持相对路径、绝对路径和 `~`，托管时使用 `{siteRoot}/index.html` |
 | `--template` | 禁止 | 可选 | 自定义 HTML 模板；默认使用内置模板 |
 
 HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL`，值为 `https://connector.dingtalk.com/webhook/flow/{flowId}`。环境变量缺失或格式错误由命令直接报错，Agent 不在命令外重复校验。
@@ -87,7 +87,9 @@ python3 scripts/weekly_report_tool.py gen-card \
   --output "$SITE_DIR/index.html"
 ```
 
-生成的 `index.html` 已内联页面运行逻辑和钉钉身份读取能力，不依赖同目录的额外 JavaScript 文件。成功结果包含绝对 `output`、`siteRoot` 和实际 `submitUrl`。
+页面数据仍保存在 `index.html` 的 `application/json` 数据块中；可执行逻辑和钉钉身份读取能力由命令输出为同目录的 JavaScript 文件，HTML 通过相对地址加载。生成结果不得包含可执行的内联脚本，以兼容 Multica Site 的 `script-src 'self'` 策略。
+
+成功结果包含绝对 `output`、`runtimeOutput`、`siteRoot`、`siteFiles` 和实际 `submitUrl`。部署时必须打包 `siteRoot` 下的完整构建产物，不能只上传 `index.html`。使用托管地址时保留末尾 `/`，以便浏览器从站点目录正确解析相对资源；Markdown 命令会自动规范化 Multica Site 根地址。
 
 页面在钉钉容器内读取当前用户身份；身份读取失败时禁止提交。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
 
@@ -103,3 +105,7 @@ python3 scripts/weekly_report_tool.py gen-card \
 ```
 
 任何校验、托管或投递失败都直接报告安全错误摘要，不绕过校验，不声称已生成、已发布或已发送。
+
+## 历史记录
+
+- 2026-08-30：HTML 产物改为入口文件加同源 JavaScript 构建资源，原因是 Multica Site 的严格 CSP 会阻止内联可执行脚本，导致页面只能显示静态布局。

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import importlib.util
 import os
 import subprocess
 import sys
@@ -13,7 +12,6 @@ from urllib.parse import quote
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
-AUTOMATION_TRANSFORMER = SKILL_DIR / "automation" / "aitable_feedback_transform.py"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
 AITABLE_WEBHOOK_URL = (
     "https://connector.dingtalk.com/webhook/flow/103b082bde2f2107d5c80007"
@@ -164,6 +162,13 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertFalse((SKILL_DIR / "assets" / "create-and-deliver.schema.json").exists())
         self.assertFalse((SKILL_DIR / "assets" / "project-rows.schema.json").exists())
         self.assertFalse((SKILL_DIR / "assets" / "card-request.example.json").exists())
+        self.assertFalse((SKILL_DIR / "automation").exists())
+
+        schema_files = sorted(
+            path.name for path in (SKILL_DIR / "assets").glob("*.schema.json")
+        )
+        self.assertEqual(schema_files, ["weekly-feedback-webhook.schema.json"])
+        self.assertEqual(list((SKILL_DIR / "assets").glob("*.js")), [])
 
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         template = (SKILL_DIR / "assets" / "weekly-feedback-template.html").read_text(
@@ -180,9 +185,41 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertIn("## 功能", skill)
         self.assertIn("## 参数规格与来源", skill)
         self.assertIn("## 命令使用", skill)
-        self.assertIn("## 协议审计", skill)
+        self.assertNotIn("协议审计", skill)
+        self.assertNotIn("变更记录", skill)
+        self.assertNotIn("变更原因", skill)
         self.assertIn("Markdown", skill)
         self.assertIn("prepare_static_site_deploy", skill)
+        self.assertNotIn("multica-fetch-proxy-config.js", skill)
+        self.assertNotIn("dingtalk-identity.js", skill)
+        self.assertNotIn("weekly-feedback-runtime.js", skill)
+        self.assertIn("index.html", skill)
+        self.assertIn("完整构建产物", skill)
+
+    def test_only_asset_schema_describes_webhook_payload(self) -> None:
+        schema_path = SKILL_DIR / "assets" / "weekly-feedback-webhook.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(schema["properties"]["action"]["const"], "submit_weekly_feedback")
+        self.assertEqual(schema["properties"]["schemaVersion"]["const"], 2)
+        self.assertTrue(
+            {
+                "submissionId",
+                "reportUrl",
+                "reportPeriod",
+                "customer",
+                "week",
+                "projects",
+                "satisfaction",
+                "dissatisfactionReasons",
+                "feedback",
+                "collector",
+                "reportTime",
+                "feedbackUserId",
+                "feedbackUserName",
+            }.issubset(set(schema["required"]))
+        )
+        self.assertFalse(schema["additionalProperties"])
 
     def test_agent_prompt_only_calls_gen_card(self) -> None:
         prompt = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
@@ -206,54 +243,35 @@ class HtmlGenerationTests(unittest.TestCase):
             command_result = json.loads(result.stdout)
             generated_data = extract_html_data(output)
             generated_html = output.read_text(encoding="utf-8")
-            identity_runtime = output.parent / "dingtalk-identity.js"
-            feedback_runtime = output.parent / "weekly-feedback-runtime.js"
-            proxy_config = output.parent / "multica-fetch-proxy-config.js"
-            identity_runtime_exists = identity_runtime.exists()
-            feedback_runtime_exists = feedback_runtime.exists()
-            proxy_config_exists = proxy_config.exists()
-            identity_runtime_text = identity_runtime.read_text(encoding="utf-8")
-            feedback_runtime_text = feedback_runtime.read_text(encoding="utf-8")
-            proxy_config_text = proxy_config.read_text(encoding="utf-8")
+            generated_files = sorted(
+                path.name for path in output.parent.iterdir() if path.is_file()
+            )
 
         self.assertEqual(command_result["success"], True)
         self.assertEqual(command_result["type"], "html")
         self.assertEqual(command_result["output"], str(output.resolve()))
         self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
         self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)
-        self.assertTrue(identity_runtime_exists)
-        self.assertTrue(feedback_runtime_exists)
-        self.assertTrue(proxy_config_exists)
-        self.assertIn("multica-fetch-proxy-config.js", generated_html)
-        self.assertIn("dingtalk-identity.js", generated_html)
-        self.assertIn("weekly-feedback-runtime.js", generated_html)
-        self.assertLess(
-            generated_html.index("multica-fetch-proxy-config.js"),
-            generated_html.index("weekly-feedback-runtime.js"),
-        )
+        self.assertEqual(generated_files, ["feedback.html"])
+        self.assertNotIn("<script src=", generated_html)
+        self.assertIn("window.__MULTICA_FETCH_PROXY_ALLOWLIST__", generated_html)
+        self.assertNotIn("__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__", generated_html)
         self.assertIn(
             "internal.user.getCurrentUserInfo",
-            identity_runtime_text,
+            generated_html,
         )
-        self.assertIn("feedbackUser", feedback_runtime_text)
-        self.assertIn("dissatisfactionReasons", feedback_runtime_text)
-        self.assertIn("feedback: state.feedback", feedback_runtime_text)
-        self.assertNotIn("projectRows", feedback_runtime_text)
-        self.assertNotIn("projectRowsJson", feedback_runtime_text)
+        self.assertIn("feedbackUser", generated_html)
+        self.assertIn("dissatisfactionReasons", generated_html)
+        self.assertIn("feedback: state.feedback", generated_html)
+        self.assertNotIn("projectRows", generated_html)
+        self.assertNotIn("projectRowsJson", generated_html)
         self.assertNotIn("feedbackDialog", generated_html)
         self.assertIn('id="customerName"', generated_html)
         self.assertIn('id="projectNames"', generated_html)
         self.assertIn('id="satisfactionOptions"', generated_html)
         self.assertIn('id="dissatisfactionReasons"', generated_html)
         self.assertIn('id="feedbackInput"', generated_html)
-        self.assertNotIn(
-            "__MULTICA_FETCH_PROXY_ALLOWLIST__", feedback_runtime_text
-        )
-        self.assertEqual(
-            proxy_config_text,
-            "window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = "
-            f"{json.dumps([AITABLE_WEBHOOK_URL], ensure_ascii=False)};\n",
-        )
+        self.assertIn(json.dumps([AITABLE_WEBHOOK_URL]), generated_html)
 
     def test_html_requires_output_and_submit_url(self) -> None:
         result = run_gen_card(
@@ -274,60 +292,6 @@ class HtmlGenerationTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("invalid choice", result.stderr)
-
-
-class DirectFormAutomationTests(unittest.TestCase):
-    def test_direct_form_payload_becomes_one_ai_table_row(self) -> None:
-        self.assertTrue(
-            AUTOMATION_TRANSFORMER.exists(),
-            "AI 表格自动化解析脚本尚未加入技能仓库",
-        )
-        spec = importlib.util.spec_from_file_location(
-            "aitable_feedback_transform", AUTOMATION_TRANSFORMER
-        )
-        self.assertIsNotNone(spec)
-        self.assertIsNotNone(spec.loader)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        result = module.main(
-            {
-                "payload": {
-                    "schemaVersion": 2,
-                    "action": "submit_weekly_feedback",
-                    "submissionId": "web-form-001",
-                    "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
-                    "customer": "维信诺",
-                    "week": "2026-W35",
-                    "projects": ["智能助理项目", "数据看板项目"],
-                    "satisfaction": "不满意",
-                    "dissatisfactionReasons": ["响应不及时", "问题未解决"],
-                    "feedback": "希望下周给出明确计划",
-                    "collector": "辰驷",
-                    "reportTime": "2026-08-30 07:00:00",
-                    "feedbackUserId": "323179",
-                    "feedbackUserName": "辰驷",
-                }
-            }
-        )
-
-        self.assertEqual(result["rowCount"], 1)
-        self.assertEqual(
-            result["rows"],
-            [
-                {
-                    "编号": "web-form-001",
-                    "客户": "维信诺",
-                    "项目": "智能助理项目、数据看板项目",
-                    "周次": "2026-W35",
-                    "满意度": "不满意",
-                    "反馈": "不满意原因：响应不及时、问题未解决；具体反馈：希望下周给出明确计划",
-                    "反馈人": "323179",
-                    "收集人": "辰驷",
-                    "反馈时间": "2026-08-30 07:00:00",
-                }
-            ],
-        )
 
 
 class MarkdownDeliveryTests(unittest.TestCase):

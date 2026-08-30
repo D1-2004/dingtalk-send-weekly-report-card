@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,8 +22,6 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 DEFAULT_TEMPLATE = ASSET_DIR / "weekly-feedback-template.html"
-HTML_RUNTIME_ASSETS = ("dingtalk-identity.js", "weekly-feedback-runtime.js")
-FETCH_PROXY_CONFIG_ASSET = "multica-fetch-proxy-config.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyFeedbackFormData">'
 DATA_BLOCK_END = "</script>"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
@@ -43,6 +40,126 @@ $summary
 
 [👉 $feedback_link_text]($feedback_url)"""
 )
+HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+        "schemaVersion",
+        "iconUrl",
+        "title",
+        "reportUrl",
+        "summaryMarkdown",
+        "projects",
+        "dissatisfactionOptions",
+        "reportPeriod",
+        "customer",
+        "week",
+        "collector",
+        "reportTime",
+        "submissionId",
+        "callbackUrl",
+    ],
+    "properties": {
+        "schemaVersion": {"const": 2},
+        "iconUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 100},
+        "reportUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
+        "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
+        "summaryMarkdown": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "projects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/project"},
+        },
+        "satisfaction": {"enum": ["", "满意", "不满意"]},
+        "dissatisfactionReasons": {
+            "type": "array",
+            "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1, "maxLength": 50},
+        },
+        "feedback": {"type": "string", "maxLength": 1000},
+        "dissatisfactionOptions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1, "maxLength": 50},
+        },
+        "reportPeriod": {"type": "string", "minLength": 1, "maxLength": 100},
+        "customer": {"type": "string", "minLength": 1, "maxLength": 100},
+        "week": {"type": "string", "minLength": 1, "maxLength": 50},
+        "collector": {"type": "string", "minLength": 1, "maxLength": 100},
+        "reportTime": {"type": "string", "minLength": 1, "maxLength": 50},
+        "submissionId": {"type": "string", "minLength": 1, "maxLength": 120},
+        "callbackUrl": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128}$",
+        },
+        "callbackHeaders": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        },
+        "formDisabled": {"type": "boolean"},
+    },
+    "$defs": {
+        "project": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": {
+                "id": {"type": "string", "minLength": 1, "maxLength": 80},
+                "name": {"type": "string", "minLength": 1, "maxLength": 100},
+            },
+            "additionalProperties": False,
+        }
+    },
+    "additionalProperties": False,
+}
+MARKDOWN_DATA_SCHEMA: dict[str, Any] = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+        "schemaVersion",
+        "title",
+        "reportPeriod",
+        "reportUrl",
+        "summaryMarkdown",
+        "feedbackUrl",
+        "recipientName",
+    ],
+    "properties": {
+        "schemaVersion": {"const": 1},
+        "title": {"type": "string", "minLength": 1, "maxLength": 100},
+        "reportPeriod": {"type": "string", "minLength": 1, "maxLength": 100},
+        "reportUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://",
+        },
+        "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
+        "summaryMarkdown": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "feedbackUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://",
+        },
+        "feedbackLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
+        "recipientName": {"type": "string", "minLength": 1, "maxLength": 100},
+    },
+    "additionalProperties": False,
+}
+
+
 class ToolError(Exception):
     """A user-facing CLI error."""
 
@@ -53,20 +170,6 @@ def require_jsonschema() -> None:
             "missing dependency jsonschema; run: "
             "python3 -m pip install -r scripts/requirements.txt"
         )
-
-
-def load_json(path: str | Path) -> Any:
-    if path == "-":
-        return json.load(sys.stdin)
-    with Path(path).open("r", encoding="utf-8") as handle:
-        return json.load(handle)
-
-
-def load_schema(filename: str) -> dict[str, Any]:
-    require_jsonschema()
-    schema = load_json(ASSET_DIR / filename)
-    Draft202012Validator.check_schema(schema)
-    return schema
 
 
 def json_path(parts: Any) -> str:
@@ -111,8 +214,10 @@ def safe_schema_message(error: Any) -> str:
     return f"violates the {validator} constraint"
 
 
-def iter_schema_errors(instance: Any, schema_filename: str) -> list[Any]:
-    validator = Draft202012Validator(load_schema(schema_filename))
+def iter_schema_errors(instance: Any, schema: dict[str, Any]) -> list[Any]:
+    require_jsonschema()
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
     return sorted(
         validator.iter_errors(instance),
         key=lambda item: tuple(str(part) for part in item.path),
@@ -175,9 +280,9 @@ def validate_aitable_webhook_url(aitable_webhook_url: str) -> None:
 
 def validate_html_form_data(data: dict[str, Any]) -> None:
     try:
-        errors = iter_schema_errors(data, "weekly-report-card-data.schema.json")
-    except (OSError, ValueError, RuntimeError) as error:
-        raise ToolError(f"cannot load feedback form schema: {error}") from error
+        errors = iter_schema_errors(data, HTML_FORM_DATA_SCHEMA)
+    except (ValueError, RuntimeError) as error:
+        raise ToolError(f"cannot validate feedback form data: {error}") from error
     if errors:
         error = errors[0]
         raise ToolError(
@@ -188,11 +293,9 @@ def validate_html_form_data(data: dict[str, Any]) -> None:
 
 def validate_markdown_data(data: dict[str, Any]) -> None:
     try:
-        errors = iter_schema_errors(
-            data, "weekly-report-markdown-data.schema.json"
-        )
-    except (OSError, ValueError, RuntimeError) as error:
-        raise ToolError(f"cannot load Markdown data schema: {error}") from error
+        errors = iter_schema_errors(data, MARKDOWN_DATA_SCHEMA)
+    except (ValueError, RuntimeError) as error:
+        raise ToolError(f"cannot validate Markdown data: {error}") from error
     if errors:
         error = errors[0]
         raise ToolError(
@@ -236,6 +339,17 @@ def write_output(output_value: str, content: str) -> Path:
     return output_path
 
 
+def inline_html_runtime(template: str, submit_url: str) -> str:
+    placeholder = "__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__"
+    if template.count(placeholder) != 1:
+        raise ToolError("template must contain one feedback proxy allowlist placeholder")
+    return template.replace(
+        placeholder,
+        json.dumps([submit_url], ensure_ascii=False),
+        1,
+    )
+
+
 def gen_html_card(
     args: argparse.Namespace, data: dict[str, Any], submit_url: str
 ) -> dict[str, Any]:
@@ -246,33 +360,12 @@ def gen_html_card(
         raise ToolError(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
-    output_path = write_output(args.output, replace_data_block(template, data))
-    proxy_config_path = output_path.parent / FETCH_PROXY_CONFIG_ASSET
-    proxy_config = (
-        "window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = "
-        + json.dumps([submit_url], ensure_ascii=False)
-        + ";\n"
-    )
-    try:
-        proxy_config_path.write_text(proxy_config, encoding="utf-8")
-    except (OSError, ValueError) as error:
-        raise ToolError(
-            f"cannot write HTML runtime asset {FETCH_PROXY_CONFIG_ASSET}: {error}"
-        ) from error
-    runtime_outputs: list[str] = [str(proxy_config_path.resolve())]
-    for filename in HTML_RUNTIME_ASSETS:
-        source = ASSET_DIR / filename
-        target = output_path.parent / filename
-        try:
-            shutil.copyfile(source, target)
-        except (OSError, ValueError) as error:
-            raise ToolError(f"cannot copy HTML runtime asset {filename}: {error}") from error
-        runtime_outputs.append(str(target.resolve()))
+    rendered = replace_data_block(template, data)
+    output_path = write_output(args.output, inline_html_runtime(rendered, submit_url))
     return {
         "success": True,
         "type": "html",
         "output": str(output_path.resolve()),
-        "assets": runtime_outputs,
         "siteRoot": str(output_path.parent.resolve()),
         "submitUrl": submit_url,
     }

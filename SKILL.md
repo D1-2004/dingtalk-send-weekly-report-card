@@ -36,10 +36,11 @@ HTML 发布失败时，不发送缺少反馈入口或使用本地文件地址的
 
 ## 项目底表与关联
 
-需要发周报的项目通常是「交付中」且合同金额较大的项目。项目基础信息以这张钉钉 AI 表格为准：
+需要发周报的项目通常是「交付中」且合同金额较大的项目。项目基础信息（LTC 项目明细）**从环境变量 `LTC_SOURCE` 读取，不写死在技能里**：`LTC_SOURCE` 的值是一条指向钉钉 AI 表格的链接，形如 `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=...sheetId={tableId}...`。Agent 用钉钉 AI 表格能力（`dws aitable`，如 `record query --base-id … --table-id …`）从该链接解析出 base-id / table-id 后再查询。
 
-- 表：`https://alidocs.dingtalk.com/i/nodes/1zknDm0WRz0NZeXQuzy3DR2xWBQEx5rG?iframeQuery=entrance%3Ddata%26sheetId%3Dis0RjSn%26viewId%3Dq8r2RTq`
 - 关键字段：项目名称、项目编号、客户名称、交付PM、项目状态、合同金额、风险级别、详细进展、是否超期。
+- 若 `LTC_SOURCE` 未配置或读取失败：跳过底表关联，仅按周报正文生成，并可提示运维补配 `LTC_SOURCE`；不猜项目名、金额或状态。
+- 换环境/换表只改 `LTC_SOURCE`，技能代码与模板不动。
 
 关联与取数规则（运行时按此执行）：
 

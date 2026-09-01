@@ -64,7 +64,6 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": [
         "schemaVersion",
-        "iconUrl",
         "title",
         "reportUrl",
         "summaryMarkdown",
@@ -87,6 +86,14 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         "summaryMarkdown": {
             "type": "array",
             "minItems": 1,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "riskMarkdown": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "nextWeekMarkdown": {
+            "type": "array",
             "items": {"type": "string", "minLength": 1, "maxLength": 500},
         },
         "projects": {
@@ -163,6 +170,16 @@ MARKDOWN_DATA_SCHEMA: dict[str, Any] = {
         "summaryMarkdown": {
             "type": "array",
             "minItems": 1,
+            "maxItems": 8,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "riskMarkdown": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500},
+        },
+        "nextWeekMarkdown": {
+            "type": "array",
             "maxItems": 8,
             "items": {"type": "string", "minLength": 1, "maxLength": 500},
         },
@@ -462,7 +479,20 @@ def normalize_hosted_site_url(url: str) -> str:
 
 
 def render_markdown(data: dict[str, Any]) -> str:
-    summary = "\n".join(f"- {line}" for line in data["summaryMarkdown"])
+    sections = [
+        ("**本周进展**", data["summaryMarkdown"]),
+        ("**风险 · 关注**", data.get("riskMarkdown") or []),
+        ("**下周重点**", data.get("nextWeekMarkdown") or []),
+    ]
+    non_empty = [(label, items) for label, items in sections if items]
+    if len(non_empty) > 1:
+        blocks = []
+        for label, items in non_empty:
+            block = [label] + [f"- {line}" for line in items]
+            blocks.append("\n".join(block))
+        summary = "\n\n".join(blocks)
+    else:
+        summary = "\n".join(f"- {line}" for line in sections[0][1])
     return MARKDOWN_TEMPLATE.substitute(
         title=data["title"],
         report_period=data["reportPeriod"],

@@ -397,5 +397,45 @@ class MarkdownDeliveryTests(unittest.TestCase):
         self.assertFalse(record.exists())
 
 
+class SummaryAndIconUrlTests(unittest.TestCase):
+    def setUp(self) -> None:
+        sys.path.insert(0, str(TOOL.parent))
+        import weekly_report_tool as w
+
+        self.w = w
+
+    def test_markdown_splits_progress_and_risk(self) -> None:
+        data = markdown_data()
+        data["riskMarkdown"] = ["数据看板加载偏慢"]
+        rendered = self.w.render_markdown(data)
+        self.assertIn("**本周进展**", rendered)
+        self.assertIn("**风险 · 关注**", rendered)
+        self.assertIn("数据看板加载偏慢", rendered)
+
+    def test_markdown_renders_three_blocks(self) -> None:
+        data = markdown_data()
+        data["riskMarkdown"] = ["文档协同卡顿"]
+        data["nextWeekMarkdown"] = ["下周完成看板性能优化"]
+        rendered = self.w.render_markdown(data)
+        self.assertIn("**本周进展**", rendered)
+        self.assertIn("**风险 · 关注**", rendered)
+        self.assertIn("**下周重点**", rendered)
+        self.assertIn("下周完成看板性能优化", rendered)
+
+    def test_markdown_without_risk_stays_plain_list(self) -> None:
+        data = markdown_data()
+        rendered = self.w.render_markdown(data)
+        self.assertNotIn("本周进展", rendered)
+        self.assertNotIn("风险 · 关注", rendered)
+        self.assertIn(data["summaryMarkdown"][0], rendered)
+
+    def test_html_schema_icon_url_is_optional(self) -> None:
+        data = html_data()
+        data.pop("iconUrl", None)
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertEqual(errors, [])
+
+
 if __name__ == "__main__":
     unittest.main()

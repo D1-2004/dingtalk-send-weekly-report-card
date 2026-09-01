@@ -293,7 +293,6 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertNotIn("projectRows", generated_runtime)
         self.assertNotIn("projectRowsJson", generated_runtime)
         self.assertNotIn("feedbackDialog", generated_runtime)
-        self.assertIn('id="customerName"', generated_html)
         self.assertIn('id="projectNames"', generated_html)
         self.assertIn('id="satisfactionOptions"', generated_html)
         self.assertIn('id="dissatisfactionReasons"', generated_html)

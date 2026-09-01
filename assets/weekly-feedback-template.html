@@ -7,20 +7,18 @@
     <style>
       :root {
         color-scheme: light;
-        --page: #eef0f3;
+        --page: #F5F6F8;
         --card: #ffffff;
-        --ink: #1b1f24;
-        --sub: #6b7280;
-        --faint: #9aa1ab;
-        --brand: #0b7cff;
-        --brand-soft: #eaf3ff;
-        --line: #e6e9ee;
-        --ok: #1f9d55;
-        --ok-soft: #eefaf2;
-        --warn: #c4791a;
-        --warn-soft: #fff6e8;
-        --warn-line: #f0c98a;
-        --danger: #e74444;
+        --ink: #111827;
+        --sub: #6B7280;
+        --faint: #9CA3AF;
+        --brand: #1677FF;
+        --brand-soft: #EAF3FF;
+        --line: #E5E7EB;
+        --field-bg: #F5F6F8;
+        --ok: #1F9D55;
+        --warn: #C4791A;
+        --danger: #E5484D;
         --radius: 16px;
       }
 
@@ -31,7 +29,7 @@
         margin: 0;
         min-height: 100vh;
         min-height: 100dvh;
-        padding: 20px 14px;
+        padding: 24px 16px;
         color: var(--ink);
         background: var(--page);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
@@ -52,114 +50,98 @@
         box-shadow: 0 10px 30px rgba(31, 35, 41, 0.06);
       }
 
-      .card-content { padding: 18px 22px 18px; }
+      .card-content { padding: 22px; }
 
       .card-head { display: flex; align-items: flex-start; gap: 12px; }
       .head-ic {
-        flex: none; width: 38px; height: 38px; border-radius: 10px;
+        flex: none; width: 36px; height: 36px; border-radius: 9px;
         background: var(--brand-soft); color: var(--brand);
         display: flex; align-items: center; justify-content: center;
       }
-      .head-ic svg { width: 22px; height: 22px; }
+      .head-ic svg { width: 20px; height: 20px; }
       .head-txt { min-width: 0; }
-      .card-title { margin: 0; overflow-wrap: anywhere; font-size: 19px; font-weight: 600; line-height: 1.3; }
-      .period { margin: 3px 0 0; color: var(--faint); font-size: 13px; line-height: 1.4; }
+      .card-title { margin: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; }
+      .period { margin: 4px 0 0; color: var(--sub); font-size: 12px; line-height: 1.4; }
 
       .report-link {
-        display: inline-flex; align-items: center; gap: 7px;
-        margin-top: 12px; min-height: 22px;
-        color: var(--brand); font-size: 14px; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 14px; min-height: 20px;
+        color: var(--brand); font-size: 14px; font-weight: 500; text-decoration: none;
       }
-      .report-link__icon { display: inline-flex; color: var(--brand); }
+      .report-link__icon { display: inline-flex; }
       .report-link__icon svg { width: 16px; height: 16px; }
 
-      .divider { height: 1px; background: var(--line); margin: 12px -12px; }
-
       .summary-panel {
-        margin-top: 14px;
+        margin-top: 16px;
         border: 1px solid var(--line);
         border-radius: 12px;
         overflow: hidden;
-        background: #fcfdfe;
       }
-      .summary-block { padding: 11px 14px; }
+      .summary-block { padding: 14px 16px; }
       .summary-block + .summary-block { border-top: 1px solid var(--line); }
-      .summary-block .summary-label { color: var(--ok); margin-bottom: 4px; }
       .summary-block[hidden] { display: none; }
-      .summary-label { font-size: 12px; font-weight: 600; color: var(--sub); margin-bottom: 6px; }
+      .summary-label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--sub); }
+      .summary-label svg { width: 16px; height: 16px; flex: none; }
+      .summary-block .summary-label { color: var(--ok); }
+      .summary-block.risk .summary-label { color: var(--warn); }
+      .summary-block.next .summary-label { color: var(--brand); }
       .summary-list { margin: 0; padding-left: 18px; }
-      .summary-list li { font-size: 14px; line-height: 1.6; margin: 5px 0; }
-      .summary-list li b { font-weight: 700; }
-      .summary-block.risk .summary-label { color: var(--warn); margin-bottom: 4px; }
-      .summary-block.next .summary-label { color: var(--brand); margin-bottom: 4px; }
+      .summary-list li { font-size: 14px; line-height: 1.7; margin: 6px 0; color: var(--ink); }
+      .summary-list li b { font-weight: 600; }
 
-      .feedback-form { display: grid; gap: 13px; padding-top: 2px; }
-      .form-section { display: grid; gap: 5px; }
-      .form-label, .feedback-form legend {
+      .feedback-form { display: grid; gap: 20px; padding-top: 20px; }
+      .form-section { display: grid; gap: 8px; }
+      .form-label {
         margin: 0; padding: 0; color: var(--sub); font-size: 13px; font-weight: 500;
       }
       .required-mark { margin-left: 3px; color: var(--danger); }
-      .readonly-value { font-size: 14px; line-height: 1.4; }
+      .readonly-value { font-size: 14px; line-height: 1.6; color: var(--ink); }
 
       .project-tags { display: flex; flex-wrap: wrap; gap: 8px; }
       .project-tag {
-        display: inline-flex; align-items: center; min-height: 30px;
-        padding: 5px 11px; border-radius: 8px; color: #3c4653;
-        background: #f2f4f6; font-size: 13px;
+        display: inline-flex; align-items: center; min-height: 24px;
+        padding: 3px 9px; border-radius: 6px; color: var(--sub);
+        background: var(--field-bg); font-size: 12px;
       }
 
-      fieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
-      .choice-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-      .choice-options.is-invalid { padding: 8px; border-radius: 14px; background: rgba(231, 68, 68, 0.08); }
+      .choice-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .choice-options.is-invalid { padding: 8px; border-radius: 12px; background: rgba(229, 72, 77, 0.08); }
       .choice-option {
-        position: relative; display: inline-flex; min-height: 40px; cursor: pointer;
-        align-items: center; justify-content: center; gap: 7px;
-        padding: 8px 16px; flex: 1 1 170px; max-width: 200px; min-width: 140px;
-        border: 1px solid var(--line); border-radius: 10px;
-        background: #fff; font-size: 14px; color: var(--ink);
-        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+        position: relative; display: flex; min-height: 40px; cursor: pointer;
+        align-items: center; justify-content: center; gap: 8px; width: 100%;
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px;
+        background: var(--card); font-size: 15px; color: var(--ink);
+        transition: background 120ms ease, border-color 120ms ease;
       }
-      .choice-option input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-      .choice-ic { display: inline-flex; }
-      .choice-ic svg { width: 16px; height: 16px; }
-      .choice-option[data-value="满意"] { border-color: #bfe3cc; background: #f1fbf5; color: #1f9d55; }
-      .choice-option[data-value="不满意"] { border-color: #f2cccc; background: #fdf3f3; color: #d14b4b; }
-      .choice-option.is-checked { font-weight: 600; }
-      .choice-option[data-value="满意"].is-checked { border-color: var(--ok); background: var(--ok); color: #fff; }
-      .choice-option[data-value="不满意"].is-checked { border-color: var(--danger); background: var(--danger); color: #fff; }
+      .choice-option input { position: static; opacity: 1; width: 18px; height: 18px; margin: 0; flex: none; cursor: pointer; accent-color: var(--brand); }
+      .choice-option.is-checked { border-color: #B7BFC9; background: #EEF1F4; font-weight: 600; }
 
-      .reason-picker { border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-      .reason-picker[hidden] { display: none; }
-      .reason-picker > summary {
-        display: flex; min-height: 44px; cursor: pointer; list-style: none;
-        align-items: center; justify-content: space-between; gap: 12px;
-        padding: 10px 13px; color: var(--sub); font-size: 14px;
-      }
-      .reason-picker > summary::-webkit-details-marker { display: none; }
-      .reason-picker > summary::after { content: "\2304"; color: #8e959e; transition: transform 160ms ease; }
-      .reason-picker[open] > summary::after { transform: rotate(180deg); }
-      .reason-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+      .reason-section { display: grid; }
+      .reason-section[hidden] { display: none; }
+      .reason-box { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; }
+      .reason-title { margin: 0 0 8px; color: var(--sub); font-size: 13px; }
+      .reason-options { display: flex; flex-wrap: wrap; gap: 8px 10px; }
       .reason-option {
-        display: flex; min-height: 40px; cursor: pointer; align-items: center; gap: 8px;
-        padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px;
-        background: #fff; font-size: 13px;
+        display: inline-flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px;
+        padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card); font-size: 13px; color: var(--ink);
       }
-      .reason-option:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); color: #0a54a8; }
-      .reason-option input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--brand); }
+      .reason-option:has(input:checked) { border-color: #B7BFC9; background: #EEF1F4; }
+      .reason-option input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--brand); flex: none; }
 
       .feedback-input {
-        width: 100%; min-height: 80px; resize: vertical; padding: 12px;
-        border: 1px solid var(--line); border-radius: 12px;
-        color: var(--ink); background: #fff; font-size: 14px; line-height: 1.55;
+        width: 100%; height: 42px; padding: 0 12px;
+        border: 1px solid var(--line); border-radius: 10px;
+        color: var(--ink); background: var(--card); font-size: 14px;
       }
       .feedback-input::placeholder { color: var(--faint); }
 
       .submit-area { display: flex; flex-direction: column; align-items: center; }
       .submit-button {
-        width: auto; min-width: 220px; min-height: 38px; cursor: pointer; border: 0; border-radius: 9px;
-        padding: 0 30px; color: #fff; background: var(--brand); font-size: 14px; font-weight: 600;
+        width: auto; min-width: 200px; min-height: 40px; cursor: pointer; border: 0; border-radius: 10px;
+        padding: 0 28px; color: #fff; background: var(--brand); font-size: 14px; font-weight: 600;
       }
-      .submit-button:disabled { cursor: not-allowed; background: #c9ced6; color: #fff; }
+      .submit-button:disabled { cursor: not-allowed; background: #C9CED6; color: #fff; }
       .submit-message { min-height: 20px; margin: 8px 0 0; color: var(--sub); font-size: 13px; text-align: center; }
       .submit-message.is-error { color: var(--danger); }
 
@@ -173,24 +155,21 @@
 
       a:focus-visible, button:focus-visible, input:focus-visible,
       textarea:focus-visible, summary:focus-visible {
-        outline: 3px solid rgba(11, 124, 255, 0.24); outline-offset: 2px;
+        outline: 3px solid rgba(22, 119, 255, 0.24); outline-offset: 2px;
       }
 
       @media (hover: hover) and (pointer: fine) {
         .report-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-        .choice-option:hover, .reason-picker:hover, .feedback-input:hover, .reason-option:hover { border-color: #cbd1d8; }
-        .submit-button:hover:not(:disabled) { background: #0a63d6; }
+        .choice-option:hover, .feedback-input:hover, .reason-option:hover { border-color: #CBD2DA; }
+        .submit-button:hover:not(:disabled) { background: #0E5FD8; }
       }
 
       @media (max-width: 560px) {
         body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
         .feedback-card { border-radius: 14px; }
-        .card-content { padding: 16px 15px 15px; }
-        .card-title { font-size: 17px; }
-        .period { font-size: 12px; }
-        .summary-list li { font-size: 13px; }
-        .reason-options { grid-template-columns: 1fr; }
-        .feedback-input { min-height: 76px; resize: none; }
+        .card-content { padding: 18px 16px 16px; }
+        .card-title { font-size: 18px; }
+        .summary-block { padding: 12px 14px; }
       }
     </style>
   </head>
@@ -214,16 +193,16 @@
 
         <div class="summary-panel">
         <section class="summary-block" id="progressBlock">
-          <div class="summary-label">✅ 本周进展</div>
+          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>本周进展</div>
           <ul class="summary-list" id="progressList"></ul>
         </section>
         <section class="summary-block risk" id="riskBlock">
-          <div class="summary-label">⚠️ 风险 · 关注</div>
+          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.8 20h18.4z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>风险 · 关注</div>
           <ul class="summary-list" id="riskList"></ul>
         </section>
 
         <section class="summary-block next" id="nextWeekBlock">
-          <div class="summary-label">📌 下周重点</div>
+          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>下周重点</div>
           <ul class="summary-list" id="nextWeekList"></ul>
         </section>
 
@@ -231,33 +210,31 @@
 
         <form class="feedback-form" id="feedbackForm" novalidate>
           <section class="form-section">
-            <p class="form-label">客户</p>
-            <div class="readonly-value" id="customerName"></div>
-          </section>
-
-          <section class="form-section">
             <p class="form-label">进行中的项目</p>
             <div class="project-tags" id="projectNames"></div>
           </section>
 
-          <fieldset class="form-section">
-            <legend>本次服务是否满意<span class="required-mark" aria-hidden="true">*</span></legend>
+          <section class="form-section">
+            <p class="form-label">本次服务是否满意<span class="required-mark" aria-hidden="true">*</span></p>
             <div class="choice-options" id="satisfactionOptions"></div>
-          </fieldset>
+          </section>
 
-          <details class="reason-picker" id="dissatisfactionReasons" hidden>
-            <summary id="reasonSummary"></summary>
-            <div class="reason-options" id="reasonOptions"></div>
-          </details>
+          <section class="reason-section" id="dissatisfactionReasons" hidden>
+            <div class="reason-box">
+              <p class="reason-title">请选择让您不满意的原因（可多选）</p>
+              <div class="reason-options" id="reasonOptions"></div>
+            </div>
+          </section>
 
           <section class="form-section">
             <label class="form-label" for="feedbackInput">具体反馈</label>
-            <textarea
+            <input
               class="feedback-input"
               id="feedbackInput"
-              maxlength="1000"
-              placeholder="请输入具体反馈（可选）"
-            ></textarea>
+              type="text"
+              maxlength="500"
+              placeholder="补充具体反馈（选填）"
+            />
           </section>
 
           <div class="submit-area">
@@ -357,11 +334,9 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     nextWeekBlock: document.querySelector("#nextWeekBlock"),
     nextWeekList: document.querySelector("#nextWeekList"),
     period: document.querySelector("#reportPeriod"),
-    customerName: document.querySelector("#customerName"),
     projectNames: document.querySelector("#projectNames"),
     satisfactionOptions: document.querySelector("#satisfactionOptions"),
     dissatisfactionReasons: document.querySelector("#dissatisfactionReasons"),
-    reasonSummary: document.querySelector("#reasonSummary"),
     reasonOptions: document.querySelector("#reasonOptions"),
     feedbackInput: document.querySelector("#feedbackInput"),
     submitButton: document.querySelector("#submitButton"),
@@ -538,7 +513,6 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
   }
 
   function renderReadOnlyContext() {
-    elements.customerName.textContent = params.customer;
     elements.projectNames.replaceChildren();
     state.projects.forEach((project) => {
       const tag = document.createElement("span");
@@ -549,10 +523,6 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
   }
 
   function renderSatisfaction() {
-    const ICONS = {
-      "满意": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14s1.3 1.8 3.5 1.8S15.5 14 15.5 14"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
-      "不满意": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 15.5s1.3-1.8 3.5-1.8 3.5 1.8 3.5 1.8"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
-    };
     function refreshChecked() {
       elements.satisfactionOptions
         .querySelectorAll(".choice-option")
@@ -578,27 +548,17 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
         refreshChecked();
         renderReasons();
       });
-      const ic = document.createElement("span");
-      ic.className = "choice-ic";
-      ic.setAttribute("aria-hidden", "true");
-      ic.innerHTML = ICONS[value];
       const text = document.createElement("span");
       text.textContent = value;
-      label.append(input, ic, text);
+      label.append(input, text);
       elements.satisfactionOptions.append(label);
     });
     refreshChecked();
   }
 
-  function selectedReasonText() {
-    return state.dissatisfactionReasons.join("，");
-  }
-
   function renderReasons() {
     const enabled = state.satisfaction === "不满意" && !state.submitted;
-    const selectedText = selectedReasonText();
     elements.dissatisfactionReasons.hidden = state.satisfaction !== "不满意";
-    elements.reasonSummary.textContent = selectedText || "选择不满意原因（可多选）";
     elements.reasonOptions.replaceChildren();
 
     params.dissatisfactionOptions.forEach((reason) => {
@@ -619,16 +579,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
             (item) => item !== reason,
           );
         }
-        elements.reasonSummary.textContent =
-          selectedReasonText() || "选择不满意原因（可多选）";
       });
       const text = document.createElement("span");
       text.textContent = reason;
       label.append(checkbox, text);
       elements.reasonOptions.append(label);
     });
-
-    if (!enabled) elements.dissatisfactionReasons.removeAttribute("open");
   }
 
   function normalizeFeedbackUser(value) {

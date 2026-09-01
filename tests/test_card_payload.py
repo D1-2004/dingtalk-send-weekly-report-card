@@ -168,7 +168,13 @@ class SimplifiedSkillTests(unittest.TestCase):
         schema_files = sorted(
             path.name for path in (SKILL_DIR / "assets").glob("*.schema.json")
         )
-        self.assertEqual(schema_files, ["weekly-feedback-webhook.schema.json"])
+        self.assertEqual(
+            schema_files,
+            [
+                "weekly-feedback-webhook.schema.json",
+                "weekly-report-briefing.schema.json",
+            ],
+        )
         self.assertEqual(list((SKILL_DIR / "assets").glob("*.js")), [])
 
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
@@ -434,6 +440,33 @@ class SummaryAndIconUrlTests(unittest.TestCase):
         data["callbackUrl"] = AITABLE_WEBHOOK_URL
         errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
         self.assertEqual(errors, [])
+
+
+class BriefingSchemaSourceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        sys.path.insert(0, str(TOOL.parent))
+        import weekly_report_tool as w
+
+        self.w = w
+
+    def test_briefing_schema_file_is_source_of_truth(self) -> None:
+        self.assertTrue(self.w.BRIEFING_SCHEMA_PATH.exists())
+        # 内嵌 HTML schema 的简报字段直接引用外部文件加载来的属性（同一对象）
+        self.assertIs(
+            self.w.HTML_FORM_DATA_SCHEMA["properties"]["summaryMarkdown"],
+            self.w.BRIEFING_PROPERTIES["summaryMarkdown"],
+        )
+        self.assertIs(
+            self.w.MARKDOWN_DATA_SCHEMA["properties"]["nextWeekMarkdown"],
+            self.w.BRIEFING_PROPERTIES["nextWeekMarkdown"],
+        )
+
+    def test_briefing_progress_item_cap_enforced(self) -> None:
+        data = html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["summaryMarkdown"] = [f"进展{i}" for i in range(6)]  # 超过 maxItems 5
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors, "超过条数上限应校验失败")
 
 
 if __name__ == "__main__":

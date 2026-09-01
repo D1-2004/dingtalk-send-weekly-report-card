@@ -22,6 +22,24 @@ except ModuleNotFoundError:
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 DEFAULT_TEMPLATE = ASSET_DIR / "weekly-feedback-template.html"
+BRIEFING_SCHEMA_PATH = ASSET_DIR / "weekly-report-briefing.schema.json"
+
+
+def _load_briefing_properties() -> dict[str, Any]:
+    """Single source of truth for the weekly briefing format (进展/风险/下周)."""
+    try:
+        raw = json.loads(BRIEFING_SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            f"cannot load briefing schema {BRIEFING_SCHEMA_PATH}: {error}"
+        ) from error
+    properties = raw.get("properties")
+    if not isinstance(properties, dict) or "summaryMarkdown" not in properties:
+        raise RuntimeError("briefing schema missing summaryMarkdown property")
+    return properties
+
+
+BRIEFING_PROPERTIES = _load_briefing_properties()
 HTML_RUNTIME_FILENAME = "weekly-feedback-app.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyFeedbackFormData">'
 DATA_BLOCK_END = "</script>"
@@ -83,19 +101,9 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         "title": {"type": "string", "minLength": 1, "maxLength": 100},
         "reportUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
         "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
-        "summaryMarkdown": {
-            "type": "array",
-            "minItems": 1,
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
-        "riskMarkdown": {
-            "type": "array",
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
-        "nextWeekMarkdown": {
-            "type": "array",
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
+        "summaryMarkdown": BRIEFING_PROPERTIES["summaryMarkdown"],
+        "riskMarkdown": BRIEFING_PROPERTIES["riskMarkdown"],
+        "nextWeekMarkdown": BRIEFING_PROPERTIES["nextWeekMarkdown"],
         "projects": {
             "type": "array",
             "minItems": 1,
@@ -167,22 +175,9 @@ MARKDOWN_DATA_SCHEMA: dict[str, Any] = {
             "pattern": "^https?://",
         },
         "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
-        "summaryMarkdown": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 8,
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
-        "riskMarkdown": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
-        "nextWeekMarkdown": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {"type": "string", "minLength": 1, "maxLength": 500},
-        },
+        "summaryMarkdown": BRIEFING_PROPERTIES["summaryMarkdown"],
+        "riskMarkdown": BRIEFING_PROPERTIES["riskMarkdown"],
+        "nextWeekMarkdown": BRIEFING_PROPERTIES["nextWeekMarkdown"],
         "feedbackUrl": {
             "type": "string",
             "minLength": 1,

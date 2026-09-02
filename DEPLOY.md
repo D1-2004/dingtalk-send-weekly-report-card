@@ -27,6 +27,9 @@
 
 - 反馈页样式由 `assets/weekly-feedback-template.html` 固定；内容结构由 `assets/weekly-report-briefing.schema.json`（进展 / 风险 / 下周重点三段）约束，脚本 `weekly_report_tool.py` 引用它作为单一真源。
 - 客户提交的回写格式见 `assets/weekly-feedback-webhook.schema.json`。
+- 正式 Webhook（2026-09-02 通过落表验收，验收记录 `AUTO-ACCEPT-20260902-001`）：`https://connector.dingtalk.com/webhook/flow/103b2bb12b6b212c3a440006`，触发关键词 `submit_weekly_feedback`，`Content-Type: application/json`。换表 / 换环境时把 `WEEKLY_FEEDBACK_SUBMIT_URL` 指向新流地址即可。
+- v2 落表 payload 要点：身份字段为 `respondentId` / `respondentNickname` / `feedbackTime`（ISO 8601）；`projects` 为 `{id,name}` 对象数组；满意度为「不满意」时 `dissatisfactionReasons` 至少一项。
+- 回写流 Python 节点的解析代码见仓库根目录 `feedback_webhook_transform.py`（输出键名与表列名一一对应，换表重建自动化流时直接复用）。
 - 合同金额仅用于选项目 / 排序，**不写进页面数据、不展示给客户、不进 Webhook**。
 
 ## 5. 已知注意

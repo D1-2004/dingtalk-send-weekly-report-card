@@ -214,20 +214,32 @@ class SimplifiedSkillTests(unittest.TestCase):
             {
                 "submissionId",
                 "reportUrl",
-                "reportPeriod",
-                "customer",
-                "week",
+                "summaryMarkdown",
+                "riskMarkdown",
+                "nextWeekMarkdown",
                 "projects",
                 "satisfaction",
                 "dissatisfactionReasons",
                 "feedback",
+                "dissatisfactionOptions",
+                "reportPeriod",
+                "customer",
+                "week",
                 "collector",
                 "reportTime",
-                "feedbackUserId",
-                "feedbackUserName",
+                "respondentId",
+                "respondentNickname",
+                "feedbackTime",
             }.issubset(set(schema["required"]))
         )
         self.assertFalse(schema["additionalProperties"])
+        self.assertNotIn("feedbackUserId", schema["properties"])
+        self.assertNotIn("feedbackUserName", schema["properties"])
+        self.assertEqual(
+            sorted(schema["properties"]["projects"]["items"]["required"]),
+            ["id", "name"],
+        )
+        self.assertTrue(schema["allOf"], "不满意时原因至少一项的条件约束应保留")
 
     def test_agent_prompt_only_calls_gen_card(self) -> None:
         prompt = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
@@ -296,6 +308,11 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertIn("feedbackUser", generated_runtime)
         self.assertIn("dissatisfactionReasons", generated_runtime)
         self.assertIn("feedback: state.feedback", generated_runtime)
+        self.assertIn("respondentId: feedbackUser.userId", generated_runtime)
+        self.assertIn("respondentNickname", generated_runtime)
+        self.assertIn("feedbackTime: new Date().toISOString()", generated_runtime)
+        self.assertNotIn("feedbackUserId", generated_runtime)
+        self.assertNotIn("feedbackUserName", generated_runtime)
         self.assertNotIn("projectRows", generated_runtime)
         self.assertNotIn("projectRowsJson", generated_runtime)
         self.assertNotIn("feedbackDialog", generated_runtime)

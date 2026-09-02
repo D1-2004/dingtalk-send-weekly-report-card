@@ -1,67 +1,82 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/schemas/weekly-feedback-webhook-v2.json",
-  "title": "Weekly feedback webhook payload v2",
+  "title": "WeeklyFeedbackWebhookPayload",
   "type": "object",
+  "additionalProperties": false,
   "required": [
-    "schemaVersion",
     "action",
+    "schemaVersion",
     "submissionId",
     "reportUrl",
-    "reportPeriod",
-    "customer",
-    "week",
+    "summaryMarkdown",
+    "riskMarkdown",
+    "nextWeekMarkdown",
     "projects",
     "satisfaction",
     "dissatisfactionReasons",
     "feedback",
+    "dissatisfactionOptions",
+    "reportPeriod",
+    "customer",
+    "week",
     "collector",
     "reportTime",
-    "feedbackUser",
-    "feedbackUserId",
-    "feedbackUserName"
+    "respondentId",
+    "respondentNickname",
+    "feedbackTime"
   ],
   "properties": {
-    "schemaVersion": {
-      "const": 2
-    },
     "action": {
       "const": "submit_weekly_feedback"
     },
+    "schemaVersion": {
+      "const": 2
+    },
     "submissionId": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 120
+      "minLength": 1
     },
     "reportUrl": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2048,
-      "pattern": "^https?://"
+      "type": "string"
     },
-    "reportPeriod": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 100
+    "summaryMarkdown": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
-    "customer": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 100
+    "riskMarkdown": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
-    "week": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 50
+    "nextWeekMarkdown": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "projects": {
       "type": "array",
       "minItems": 1,
-      "uniqueItems": true,
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 100
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
     "satisfaction": {
@@ -72,65 +87,68 @@
     },
     "dissatisfactionReasons": {
       "type": "array",
-      "uniqueItems": true,
       "items": {
         "type": "string",
-        "minLength": 1,
-        "maxLength": 50
+        "minLength": 1
       }
     },
     "feedback": {
+      "type": "string"
+    },
+    "dissatisfactionOptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reportPeriod": {
+      "type": "string"
+    },
+    "customer": {
       "type": "string",
-      "maxLength": 1000
+      "minLength": 1
+    },
+    "week": {
+      "type": "string",
+      "minLength": 1
     },
     "collector": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 100
+      "minLength": 1
     },
     "reportTime": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 50
+      "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
     },
-    "feedbackUser": {
-      "type": "object",
-      "required": [
-        "userId",
-        "name",
-        "avatar",
-        "corpId"
-      ],
-      "properties": {
-        "userId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "name": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "avatar": {
-          "type": "string",
-          "maxLength": 2048
-        },
-        "corpId": {
-          "type": "string",
-          "maxLength": 128
-        }
-      },
-      "additionalProperties": false
-    },
-    "feedbackUserId": {
+    "respondentId": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 128
+      "minLength": 1
     },
-    "feedbackUserName": {
+    "respondentNickname": {
       "type": "string",
-      "maxLength": 100
+      "minLength": 1
+    },
+    "feedbackTime": {
+      "type": "string",
+      "format": "date-time"
     }
   },
-  "additionalProperties": false
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "satisfaction": {
+            "const": "不满意"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "dissatisfactionReasons": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
 }

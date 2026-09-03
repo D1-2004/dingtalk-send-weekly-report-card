@@ -371,6 +371,29 @@ def replace_data_block(template: str, data: dict[str, Any]) -> str:
     )
 
 
+HTML_TITLE_PATTERN = re.compile(
+    r"<title>[^<]*</title>", flags=re.IGNORECASE | re.DOTALL
+)
+
+
+def replace_html_title(template: str, title: str) -> str:
+    """将模板 <title>…</title> 替换为具体客户/项目周报标题。
+
+    钉钉聊天里链接预览/卡片是读静态 HTML 里的 <title>，
+    运行时 JS 修改的 document.title 未必被抓取，因此在生成时静态写入。
+    """
+    if not HTML_TITLE_PATTERN.search(template):
+        raise ToolError("template must contain a <title> tag")
+    safe_title = (
+        title.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    return HTML_TITLE_PATTERN.sub(
+        f"<title>{safe_title}</title>", template, count=1
+    )
+
+
 def write_output(output_value: str, content: str) -> Path:
     output_path = Path(output_value).expanduser()
     if output_path.exists() and output_path.is_dir():
@@ -447,6 +470,7 @@ def gen_html_card(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
     rendered = replace_data_block(template, data)
+    rendered = replace_html_title(rendered, data["title"])
     configured = configure_html_runtime(rendered, submit_url)
     generated_html, generated_runtime = externalize_html_runtime(configured)
 
@@ -487,20 +511,17 @@ def normalize_hosted_site_url(url: str) -> str:
 
 
 def render_markdown(data: dict[str, Any]) -> str:
-    sections = [
-        ("**本周进展**", data["summaryMarkdown"]),
-        ("**风险 · 关注**", data.get("riskMarkdown") or []),
-        ("**下周重点**", data.get("nextWeekMarkdown") or []),
-    ]
-    non_empty = [(label, items) for label, items in sections if items]
-    if len(non_empty) > 1:
-        blocks = []
-        for label, items in non_empty:
-            block = [label] + [f"- {line}" for line in items]
-            blocks.append("\n".join(block))
-        summary = "\n\n".join(blocks)
-    else:
-        summary = "\n".join(f"- {line}" for line in sections[0][1])
+    # IM 消息只保留本周进展要点（最多 3 条）。风险 · 关注 / 下周重点即使传了也不外显，
+    # 用「更多信息……」引导客户点开反馈页查看完整周报。
+    progress_items = list(data["summaryMarkdown"])[:3]
+    progress_lines = [f"- {line}" for line in progress_items]
+    risk = data.get("riskMarkdown") or []
+    next_week = data.get("nextWeekMarkdown") or []
+    if risk or next_week:
+        progress_lines.append("- 更多信息……")
+
+    summary = "**本周进展**\n" + "\n".join(progress_lines)
+
     # 完整周报链接（reportUrl）不外显：客户需点开反馈入口才能看到完整周报，
     # 避免只读链接不填反馈。
     return MARKDOWN_TEMPLATE.substitute(

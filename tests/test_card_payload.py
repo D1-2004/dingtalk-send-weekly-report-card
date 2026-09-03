@@ -299,6 +299,7 @@ class HtmlGenerationTests(unittest.TestCase):
             '<script src="./weekly-feedback-app.js"></script>',
             generated_html,
         )
+        self.assertIn("<title>维信诺周报</title>", generated_html)
         executable_inline_scripts = re.findall(
             r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>',
             generated_html,
@@ -460,9 +461,12 @@ class SummaryAndIconUrlTests(unittest.TestCase):
         data = markdown_data()
         data["riskMarkdown"] = ["数据看板加载偏慢"]
         rendered = self.w.render_markdown(data)
+        # IM 消息只留本周进展；风险/下周不外显，用「更多信息……」引导点链接
         self.assertIn("**本周进展**", rendered)
-        self.assertIn("**风险 · 关注**", rendered)
-        self.assertIn("数据看板加载偏慢", rendered)
+        self.assertNotIn("**风险 · 关注**", rendered)
+        self.assertNotIn("**下周重点**", rendered)
+        self.assertNotIn("数据看板加载偏慢", rendered)
+        self.assertIn("更多信息……", rendered)
 
     def test_markdown_renders_three_blocks(self) -> None:
         data = markdown_data()
@@ -470,16 +474,27 @@ class SummaryAndIconUrlTests(unittest.TestCase):
         data["nextWeekMarkdown"] = ["下周完成看板性能优化"]
         rendered = self.w.render_markdown(data)
         self.assertIn("**本周进展**", rendered)
-        self.assertIn("**风险 · 关注**", rendered)
-        self.assertIn("**下周重点**", rendered)
-        self.assertIn("下周完成看板性能优化", rendered)
+        self.assertNotIn("**风险 · 关注**", rendered)
+        self.assertNotIn("**下周重点**", rendered)
+        self.assertNotIn("文档协同卡顿", rendered)
+        self.assertNotIn("下周完成看板性能优化", rendered)
+        self.assertIn("更多信息……", rendered)
 
     def test_markdown_without_risk_stays_plain_list(self) -> None:
         data = markdown_data()
         rendered = self.w.render_markdown(data)
-        self.assertNotIn("本周进展", rendered)
-        self.assertNotIn("风险 · 关注", rendered)
+        self.assertIn("**本周进展**", rendered)
         self.assertIn(data["summaryMarkdown"][0], rendered)
+        self.assertNotIn("更多信息……", rendered)
+
+    def test_markdown_progress_truncated_to_three(self) -> None:
+        data = markdown_data()
+        data["summaryMarkdown"] = ["进展一", "进展二", "进展三", "进展四", "进展五"]
+        rendered = self.w.render_markdown(data)
+        self.assertIn("进展一", rendered)
+        self.assertIn("进展三", rendered)
+        self.assertNotIn("进展四", rendered)
+        self.assertNotIn("进展五", rendered)
 
     def test_html_schema_icon_url_is_optional(self) -> None:
         data = html_data()

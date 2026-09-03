@@ -44,6 +44,7 @@ HTML_RUNTIME_FILENAME = "weekly-feedback-app.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyFeedbackFormData">'
 DATA_BLOCK_END = "</script>"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
+VIEW_URL_ENV = "WEEKLY_FEEDBACK_VIEW_URL"
 AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
 AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -132,6 +133,10 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
             "type": "string",
             "minLength": 1,
             "pattern": "^https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128}$",
+        },
+        "viewCallbackUrl": {
+            "type": "string",
+            "pattern": "^(|https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128})$",
         },
         "callbackHeaders": {
             "type": "object",
@@ -280,12 +285,22 @@ def require_submit_url() -> str:
     return value
 
 
-def validate_aitable_webhook_url(aitable_webhook_url: str) -> None:
+def optional_view_url() -> str:
+    value = os.environ.get(VIEW_URL_ENV, "")
+    if not value:
+        return ""
+    validate_aitable_webhook_url(value, VIEW_URL_ENV)
+    return value
+
+
+def validate_aitable_webhook_url(
+    aitable_webhook_url: str, env_name: str = SUBMIT_URL_ENV
+) -> None:
     try:
         parsed = urlparse(aitable_webhook_url)
         port = parsed.port
     except ValueError as error:
-        raise ToolError(f"{SUBMIT_URL_ENV} is invalid") from error
+        raise ToolError(f"{env_name} is invalid") from error
     if (
         parsed.scheme != "https"
         or parsed.hostname != AITABLE_WEBHOOK_HOST
@@ -297,13 +312,13 @@ def validate_aitable_webhook_url(aitable_webhook_url: str) -> None:
         or not parsed.path.startswith(AITABLE_WEBHOOK_PATH_PREFIX)
     ):
         raise ToolError(
-            f"{SUBMIT_URL_ENV} must use "
+            f"{env_name} must use "
             "https://connector.dingtalk.com/webhook/flow/{flowId}"
         )
     flow_id = parsed.path[len(AITABLE_WEBHOOK_PATH_PREFIX) :]
     if not FLOW_ID_PATTERN.fullmatch(flow_id):
         raise ToolError(
-            f"{SUBMIT_URL_ENV} flowId must contain 1-128 letters, digits, "
+            f"{env_name} flowId must contain 1-128 letters, digits, "
             "underscores, or hyphens"
         )
     return None
@@ -513,6 +528,7 @@ def validate_generation_parameters(
         aitable_webhook_url = require_submit_url()
         validate_aitable_webhook_url(aitable_webhook_url)
         data["callbackUrl"] = aitable_webhook_url
+        data["viewCallbackUrl"] = optional_view_url()
         validate_html_form_data(data)
         return data, aitable_webhook_url
 

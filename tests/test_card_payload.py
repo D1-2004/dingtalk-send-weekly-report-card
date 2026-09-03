@@ -14,6 +14,7 @@ from urllib.parse import quote
 SKILL_DIR = Path(__file__).resolve().parents[1]
 TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
+VIEW_URL_ENV = "WEEKLY_FEEDBACK_VIEW_URL"
 AITABLE_WEBHOOK_URL = (
     "https://connector.dingtalk.com/webhook/flow/103b082bde2f2107d5c80007"
 )
@@ -91,6 +92,7 @@ raise SystemExit(int(os.environ.get("FAKE_DWS_EXIT", "0")))
 def command_environment(
     *,
     submit_url: str | None = None,
+    view_url: str | None = None,
     fake_dws_dir: Path | None = None,
     fake_response: dict | str | None = None,
     fake_exit: int = 0,
@@ -100,6 +102,7 @@ def command_environment(
     environment = os.environ.copy()
     for name in (
         SUBMIT_URL_ENV,
+        VIEW_URL_ENV,
         "FAKE_DWS_RECORD",
         "FAKE_DWS_STDOUT",
         "FAKE_DWS_STDERR",
@@ -108,6 +111,8 @@ def command_environment(
         environment.pop(name, None)
     if submit_url is not None:
         environment[SUBMIT_URL_ENV] = submit_url
+    if view_url is not None:
+        environment[VIEW_URL_ENV] = view_url
     if fake_dws_dir is not None:
         environment["PATH"] = f"{fake_dws_dir}{os.pathsep}{environment['PATH']}"
     if record_path is not None:
@@ -171,6 +176,7 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertEqual(
             schema_files,
             [
+                "weekly-feedback-view.schema.json",
                 "weekly-feedback-webhook.schema.json",
                 "weekly-report-briefing.schema.json",
             ],
@@ -283,6 +289,9 @@ class HtmlGenerationTests(unittest.TestCase):
         )
         self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
         self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)
+        self.assertEqual(generated_data["viewCallbackUrl"], "")
+        self.assertIn("sendViewBeacon", generated_runtime)
+        self.assertIn("view_weekly_feedback", generated_runtime)
         self.assertEqual(
             generated_files,
             ["feedback.html", "weekly-feedback-app.js"],
@@ -321,6 +330,24 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertIn('id="dissatisfactionReasons"', generated_html)
         self.assertIn('id="feedbackInput"', generated_html)
         self.assertIn(json.dumps([AITABLE_WEBHOOK_URL]), generated_runtime)
+
+    def test_html_injects_view_url_when_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "feedback.html"
+            result = run_gen_card(
+                "html",
+                html_data(),
+                output=output,
+                environment=command_environment(
+                    submit_url=AITABLE_WEBHOOK_URL,
+                    view_url=AITABLE_WEBHOOK_URL,
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated_data = extract_html_data(output)
+
+        self.assertEqual(generated_data["viewCallbackUrl"], AITABLE_WEBHOOK_URL)
 
     def test_html_requires_output_and_submit_url(self) -> None:
         result = run_gen_card(

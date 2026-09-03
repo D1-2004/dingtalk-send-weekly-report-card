@@ -8,8 +8,9 @@
 | --- | --- | --- | --- |
 | `LTC_SOURCE` | 是（否则退化为只按周报正文生成） | LTC 项目明细来源，值为一条**钉钉 AI 表格链接**；Agent 用 `dws aitable` 解析出 base-id / table-id 后按客户名反查"交付中"项目、金额排序 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=entrance%3Ddata%26sheetId%3D{tableId}%26viewId%3D{viewId}` |
 | `WEEKLY_FEEDBACK_SUBMIT_URL` | 是（生成 HTML 反馈页时脚本强校验） | 客户提交反馈回写的钉钉 AI 表格 Webhook 流地址，格式固定 | `https://connector.dingtalk.com/webhook/flow/{flowId}` |
+| `WEEKLY_FEEDBACK_VIEW_URL` | 否 | 客户「打开反馈页」心跳的回写 Webhook 流地址（写入「周报回访·查看日志」表，用于统计已读未填）。未配置时页面不打心跳 | `https://connector.dingtalk.com/webhook/flow/{flowId}` |
 
-> 换表 / 换环境只改这两个环境变量，技能代码与 HTML 模板不动。
+> 换表 / 换环境改两个必填环境变量即可，技能代码与 HTML 模板不动；`WEEKLY_FEEDBACK_VIEW_URL` 为可选增强，按需配置。
 
 ## 2. 依赖
 
@@ -30,6 +31,8 @@
 - 正式 Webhook（2026-09-02 通过落表验收，验收记录 `AUTO-ACCEPT-20260902-001`）：`https://connector.dingtalk.com/webhook/flow/103b2bb12b6b212c3a440006`，触发关键词 `submit_weekly_feedback`，`Content-Type: application/json`。换表 / 换环境时把 `WEEKLY_FEEDBACK_SUBMIT_URL` 指向新流地址即可。
 - v2 落表 payload 要点：身份字段为 `respondentId` / `respondentNickname` / `feedbackTime`（ISO 8601）；`projects` 为 `{id,name}` 对象数组；满意度为「不满意」时 `dissatisfactionReasons` 至少一项。
 - 回写流 Python 节点的解析代码见仓库根目录 `feedback_webhook_transform.py`（输出键名与表列名一一对应，换表重建自动化流时直接复用）。
+- 查看心跳：页面加载后向 `WEEKLY_FEEDBACK_VIEW_URL` 静默 POST `action=view_weekly_feedback`（钉钉内带身份、失败记匿名），协议见 `assets/weekly-feedback-view.schema.json`，解析代码见 `feedback_view_transform.py`，落「周报回访·查看日志」表。统计「已读未填」= 查看日志有记录但反馈表无同 `回访记录ID` 提交记录。
+- 反馈统计去重口径：同一 `回访记录ID + 提交人ID` 多次提交时，取 `客户反馈时间` 最新的一行；历史全量留痕。
 - 合同金额仅用于选项目 / 排序，**不写进页面数据、不展示给客户、不进 Webhook**。
 
 ## 5. 已知注意

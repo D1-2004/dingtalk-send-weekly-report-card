@@ -127,6 +127,8 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 页面在钉钉容器内读取当前用户身份；身份读取失败时禁止提交。满意度为整页一组，选择「不满意」后才展开四项原因下钻。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
 
+页面加载后还会向可选的 `WEEKLY_FEEDBACK_VIEW_URL` 静默上报一次「打开」心跳（`action=view_weekly_feedback`，钉钉内带身份、身份失败记匿名），落入「周报回访·查看日志」表，用于统计「已读未填」；未配置该环境变量时不打心跳。心跳协议见 `assets/weekly-feedback-view.schema.json`。
+
 ### Markdown 消息
 
 Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。`recipientName` 默认填发起人（谁给周报就发给谁确认），外发客户/群的唯一例外见「发送与确认规则」。
@@ -148,3 +150,4 @@ python3 scripts/weekly_report_tool.py gen-card \
 - 2026-08-31：样式与信息结构升级——头部去掉依赖外链的客户 logo 改用内联图标、PC/移动端字号与间距收紧、摘要拆「本周进展 + 风险 · 关注」两块（新增可选 `riskMarkdown`）、满意度改为两个大按钮、不满意下钻固定四项；`iconUrl` 转为可选。明确以 LTC 项目底表关联项目并按合同金额降序排序（金额仅内部排序用，不外发）。
 - 2026-09-01：回写 Webhook 升级 v2 落表 Schema（`respondentId`/`respondentNickname`/`feedbackTime`、`projects` 对象化、不满意原因条件必填），前端 payload 与回写 Python 同步。
 - 2026-09-03：新增「发送与确认规则」——回访消息默认发发起人本人预览；外发客户/群须发起人明确指定对象且确认内容全文，"直接发"也先经发起人确认；不再主动询问"发给谁"。
+- 2026-09-03：新增「打开」心跳（可选 `WEEKLY_FEEDBACK_VIEW_URL`）——页面加载静默上报 `view_weekly_feedback`，落「周报回访·查看日志」表，支持统计"已读未填"；明确反馈去重口径（同回访记录ID+提交人ID 取最新）。

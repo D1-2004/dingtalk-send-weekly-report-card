@@ -698,6 +698,28 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     }
   }
 
+  function sendViewBeacon(identity) {
+    const url = params.viewCallbackUrl;
+    if (!url) return;
+    const payload = {
+      schemaVersion: 2,
+      action: "view_weekly_feedback",
+      submissionId: params.submissionId,
+      customer: params.customer,
+      week: params.week,
+      viewTime: new Date().toISOString(),
+      respondentId: identity ? identity.userId : "",
+      respondentNickname: identity ? identity.name || identity.userId : "",
+      viewEnv: identity ? "dingtalk" : "anonymous",
+    };
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   function initialize() {
     elements.title.textContent = params.title;
     document.title = params.title;
@@ -713,6 +735,9 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     renderSatisfaction();
     renderReasons();
     state.identityPromise = loadFeedbackUser();
+    state.identityPromise
+      .then((user) => sendViewBeacon(user))
+      .catch(() => sendViewBeacon(null));
     state.identityPromise.catch((error) => {
       console.error("周报反馈页获取当前用户失败", error);
     });

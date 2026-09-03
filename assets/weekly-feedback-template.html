@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>客户周报满意度回访</title>
+    <title>客户周报反馈</title>
     <style>
       :root {
         color-scheme: light;
@@ -128,6 +128,8 @@
       }
       .reason-option:has(input:checked) { border-color: #B7BFC9; background: #EEF1F4; }
       .reason-option input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--brand); flex: none; }
+      .reason-other { margin-top: 10px; }
+      .reason-other[hidden] { display: none; }
 
       .feedback-input {
         width: 100%; height: 42px; padding: 0 12px;
@@ -223,17 +225,26 @@
             <div class="reason-box">
               <p class="reason-title">请选择让您不满意的原因（可多选）</p>
               <div class="reason-options" id="reasonOptions"></div>
+              <div class="reason-other" id="reasonOtherWrap" hidden>
+                <input
+                  class="feedback-input"
+                  id="reasonOtherInput"
+                  type="text"
+                  maxlength="200"
+                  placeholder="请补充「其他」的具体情况"
+                />
+              </div>
             </div>
           </section>
 
           <section class="form-section">
-            <label class="form-label" for="feedbackInput">具体反馈</label>
+            <label class="form-label" for="feedbackInput">更多反馈</label>
             <input
               class="feedback-input"
               id="feedbackInput"
               type="text"
               maxlength="500"
-              placeholder="补充具体反馈（选填）"
+              placeholder="欢迎补充更多反馈（选填）"
             />
           </section>
 
@@ -252,21 +263,21 @@
     <script type="application/json" id="weeklyFeedbackFormData">
       {
         "schemaVersion": 2,
-        "title": "维信诺项目周报回访",
+        "title": "维信诺周报",
         "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
         "reportLinkText": "查看完整周报",
         "summaryMarkdown": [
           "智能助理：意图识别模型完成迭代，准确率 **提升 3%**",
           "数据看板：大屏渲染完成，**导出功能已上线**",
-          "本周新增需求 11 项已完成 2 项，工单关闭 2 个"
+          "贵司提出的 11 项需求中，本周已完成 2 项，另有 2 个工单已处理关闭"
         ],
         "riskMarkdown": [
-          "文档多人同时编辑偶发卡顿，影响日常使用，已提工单排查",
-          "数据看板大数据量（>5 万行）加载偏慢，已排期下周优化"
+          "文档多人同时编辑时偶发卡顿，正在排查原因并将尽快修复",
+          "数据看板在大数据量（5 万行以上）时加载偏慢，已安排下周优化"
         ],
         "nextWeekMarkdown": [
-          "完成数据看板分页与缓存优化，解决大数据量加载",
-          "推进智能助理二期需求评审"
+          "完成数据看板分页与缓存优化，改善大数据量加载速度",
+          "需要贵司确认智能助理二期的需求范围，以便安排需求评审"
         ],
         "projects": [
           { "id": "p1", "name": "智能助理项目" },
@@ -276,7 +287,7 @@
         "dissatisfactionReasons": [],
         "feedback": "",
         "dissatisfactionOptions": [
-          "所得与期望效果不符合",
+          "产品能力不满足期望",
           "交付进度不满意",
           "沟通响应不及时",
           "其他"
@@ -315,6 +326,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     projects: params.projects.map((project) => ({ id: project.id, name: project.name })),
     satisfaction: params.satisfaction || "",
     dissatisfactionReasons: [...(params.dissatisfactionReasons || [])],
+    otherDetail: "",
     feedback: params.feedback || "",
     submitted: Boolean(params.formDisabled),
     feedbackUser: null,
@@ -338,6 +350,8 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     satisfactionOptions: document.querySelector("#satisfactionOptions"),
     dissatisfactionReasons: document.querySelector("#dissatisfactionReasons"),
     reasonOptions: document.querySelector("#reasonOptions"),
+    reasonOtherWrap: document.querySelector("#reasonOtherWrap"),
+    reasonOtherInput: document.querySelector("#reasonOtherInput"),
     feedbackInput: document.querySelector("#feedbackInput"),
     submitButton: document.querySelector("#submitButton"),
     submitMessage: document.querySelector("#submitMessage"),
@@ -556,6 +570,18 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     refreshChecked();
   }
 
+  function refreshOtherInput() {
+    const enabled = state.satisfaction === "不满意" && !state.submitted;
+    const visible =
+      enabled &&
+      state.dissatisfactionReasons.includes("其他");
+    elements.reasonOtherWrap.hidden = !visible;
+    elements.reasonOtherInput.disabled = !visible;
+    if (visible && document.activeElement !== elements.reasonOtherInput) {
+      elements.reasonOtherInput.value = state.otherDetail;
+    }
+  }
+
   function renderReasons() {
     const enabled = state.satisfaction === "不满意" && !state.submitted;
     elements.dissatisfactionReasons.hidden = state.satisfaction !== "不满意";
@@ -579,12 +605,14 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
             (item) => item !== reason,
           );
         }
+        refreshOtherInput();
       });
       const text = document.createElement("span");
       text.textContent = reason;
       label.append(checkbox, text);
       elements.reasonOptions.append(label);
     });
+    refreshOtherInput();
   }
 
   function normalizeFeedbackUser(value) {
@@ -655,15 +683,27 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     elements.submitButton.textContent = "已提交";
     elements.submitButton.disabled = true;
     elements.feedbackInput.disabled = true;
+    elements.reasonOtherInput.disabled = true;
     renderSatisfaction();
     renderReasons();
+  }
+
+  function buildCombinedFeedback() {
+    const otherDetail = state.otherDetail.trim();
+    const moreFeedback = elements.feedbackInput.value.trim();
+    if (otherDetail && moreFeedback) {
+      return `其他：${otherDetail}\n更多反馈：${moreFeedback}`;
+    }
+    if (otherDetail) return `其他：${otherDetail}`;
+    return moreFeedback;
   }
 
   async function submitFeedback(event) {
     event.preventDefault();
     elements.submitMessage.classList.remove("is-error");
     elements.submitMessage.textContent = "";
-    state.feedback = elements.feedbackInput.value.trim();
+    state.otherDetail = elements.reasonOtherInput.value;
+    state.feedback = buildCombinedFeedback();
 
     if (!validate()) {
       elements.submitMessage.classList.add("is-error");
@@ -736,6 +776,9 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     elements.feedbackInput.disabled = state.submitted;
     elements.submitButton.textContent = "提交反馈";
     elements.form.addEventListener("submit", submitFeedback);
+    elements.reasonOtherInput.addEventListener("input", () => {
+      state.otherDetail = elements.reasonOtherInput.value;
+    });
     renderSummary();
     renderReadOnlyContext();
     renderSatisfaction();

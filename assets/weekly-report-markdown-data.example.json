@@ -1,23 +1,22 @@
 {
   "schemaVersion": 1,
-  "title": "维信诺项目周报回访",
+  "title": "维信诺周报",
   "reportPeriod": "2026年3月31日—2026年4月10日",
   "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
-  "reportLinkText": "查看本周服务报告",
   "summaryMarkdown": [
     "智能助理：意图识别模型完成迭代，准确率 **提升 3%**",
     "数据看板：大屏渲染完成，**导出功能已上线**",
-    "本周新增需求 11 项已完成 2 项，工单关闭 2 个"
+    "贵司提出的 11 项需求中，本周已完成 2 项，另有 2 个工单已处理关闭"
   ],
   "riskMarkdown": [
-    "文档多人同时编辑偶发卡顿，影响日常使用，已提工单排查",
-    "数据看板大数据量（>5 万行）加载偏慢，已排期下周优化"
+    "文档多人同时编辑时偶发卡顿，正在排查原因并将尽快修复",
+    "数据看板在大数据量（5 万行以上）时加载偏慢，已安排下周优化"
   ],
   "nextWeekMarkdown": [
-    "完成数据看板分页与缓存优化，解决大数据量加载",
-    "推进智能助理二期需求评审"
+    "完成数据看板分页与缓存优化，改善大数据量加载速度",
+    "需要贵司确认智能助理二期的需求范围，以便安排需求评审"
   ],
   "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/example-feedback/",
-  "feedbackLinkText": "填写本周反馈",
+  "feedbackLinkText": "查看完整周报并反馈您的意见",
   "recipientName": "辰驷"
 }

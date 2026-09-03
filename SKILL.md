@@ -17,10 +17,10 @@ scripts/weekly_report_tool.py gen-card
 
 命令支持：
 
-- `markdown`：默认类型，渲染并发送带周报链接和反馈入口的 Markdown 消息。
+- `markdown`：默认类型，渲染并发送带反馈入口的 Markdown 消息；完整周报链接不在消息中外显。
 - `html`：生成符合 Multica Site CSP 的响应式网页构建产物，供 Multica Site 托管。
 
-网页只收集一份整体反馈（整页一组满意度，不按项目拆分）。客户与项目只读展示，用户填写一次满意度、不满意原因和具体反馈。提交给 Webhook 的数据协议见 `assets/weekly-feedback-webhook.schema.json`。
+网页只收集一份整体反馈（整页一组满意度，不按项目拆分）。客户与项目只读展示，用户填写一次满意度、不满意原因和更多反馈。提交给 Webhook 的数据协议见 `assets/weekly-feedback-webhook.schema.json`。
 
 ## 工作流
 
@@ -80,7 +80,7 @@ HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL`，值为 `https://
 | --- | --- |
 | 周报链接 | 用户消息中的原始链接 |
 | 客户 | 用户明确说明优先，否则从周报标题和正文提取，可对照底表 `客户名称` |
-| 标题 | 通常为“{客户或项目}周报回访” |
+| 标题 | 通常为“{客户或项目}周报”，不带“回访”等内部用词 |
 | 时间周期、周次 | 周报正文；缺少周次时根据日期范围计算 ISO 周次 |
 | 本周进展 `summaryMarkdown` | **先写"做成了什么"**：可交付成果、上线/完成的功能、关键里程碑（如"意图识别模型完成迭代，准确率 +3%"），一条一句、客户视角可读；数量（新增需求/工单等）只作佐证放句末或括号，禁止只有流水数字、看不出内容。3–5 条，不编造 |
 | 风险 · 关注 `riskMarkdown` | 从周报正文提炼需客户知悉的风险/待办，可为空数组；与底表 `风险级别`、`是否超期` 相互印证但不编造 |
@@ -92,6 +92,8 @@ HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL`，值为 `https://
 
 使用当前 Agent 已有的文档读取能力获取周报正文；读取失败时请求授权或让用户粘贴正文，不根据标题猜测正文。
 
+三段文案（进展/风险/下周）一律**面向客户**书写：站在"给客户展示本周服务"的视角，不出现内部口吻（如"客户已确认""等客户回复"这类第三人称表述）；需要客户配合或决策的事项，用"需要贵司……"开头写清楚要什么、为了什么。
+
 ## 命令使用
 
 ### HTML 反馈表单
@@ -102,7 +104,7 @@ HTML 输入样例见 `assets/weekly-feedback-html-data.example.json`。必填字
 - `title`、`reportUrl`、`reportPeriod`、`customer`、`week`、`collector`、`reportTime`、`submissionId`：非空字符串。
 - `summaryMarkdown`：本周进展字符串数组。
 - `projects`：只读项目数组，每项包含唯一 `id` 和 `name`。
-- `dissatisfactionOptions`：不满意原因快捷选项数组，**固定为四项**：`所得与期望效果不符合`、`交付进度不满意`、`沟通响应不及时`、`其他`。
+- `dissatisfactionOptions`：不满意原因快捷选项数组，**固定为四项**：`产品能力不满足期望`、`交付进度不满意`、`沟通响应不及时`、`其他`。
 
 可选字段：
 
@@ -125,13 +127,15 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 成功结果包含绝对 `output`、`runtimeOutput`、`siteRoot`、`siteFiles` 和实际 `submitUrl`。部署时必须打包 `siteRoot` 下的完整构建产物，不能只上传 `index.html`。使用托管地址时保留末尾 `/`，以便浏览器从站点目录正确解析相对资源；Markdown 命令会自动规范化 Multica Site 根地址。
 
-页面在钉钉容器内读取当前用户身份用于实名提交；身份读取失败（浏览器/外部客户）时降级为匿名提交，提交人记「匿名客户」，不硬拦。满意度为整页一组，选择「不满意」后才展开四项原因下钻。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
+页面在钉钉容器内读取当前用户身份用于实名提交；身份读取失败（浏览器/外部客户）时降级为匿名提交，提交人记「匿名客户」，不硬拦。满意度为整页一组，选择「不满意」后才展开四项原因下钻；勾选「其他」时在其后展开一行内联输入框，客户填写的内容在提交时并入 `feedback` 字段（格式「其他：…」，与「更多反馈」内容同段换行分隔），不新增协议字段，落表仍走「其他备注」列。页面底部的补充输入框标题为「更多反馈」。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
 
-页面加载后还会向可选的 `WEEKLY_FEEDBACK_VIEW_URL` 静默上报一次「打开」心跳（`action=view_weekly_feedback`，钉钉内记 `dingtalk`、浏览器记 `anonymous`，并带 `collector`），落入「周报回访·查看日志」表；未配置该环境变量时不打心跳。心跳协议见 `assets/weekly-feedback-view.schema.json`。「已读未填」= 存在匿名查看且反馈表无同 `回访记录ID` 提交；实名（钉钉内）查看视为内部预览，统计时排除。
+页面加载后还会向可选的 `WEEKLY_FEEDBACK_VIEW_URL` 静默上报一次「打开」心跳（`action=view_weekly_feedback`，钉钉内记 `dingtalk`、浏览器记 `anonymous`，并带 `collector`），落入「周报回访·查看日志」表；未配置该环境变量时不打心跳。心跳协议见 `assets/weekly-feedback-view.schema.json`。查看日志按「回访记录ID + 查看环境」**upsert** 落表（自动化流：Python 解析 → 查找记录 → 条件分支 → 更新「最后查看时间/查看人/查看人ID」或新增），同一链接同一环境只留一行：`查看时间`（createdTime）= 首次打开，`最后查看时间` = 最近一次打开，不随打开次数涨行。「已读未填」= 存在 `查看环境=anonymous` 的行且反馈表无同 `回访记录ID` 提交，无需去重；实名（钉钉内）行视为内部预览，统计时排除。
 
 ### Markdown 消息
 
 Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。`recipientName` 默认填发起人（谁给周报就发给谁确认），外发客户/群的唯一例外见「发送与确认规则」。
+
+**完整周报链接不外显**：`reportUrl` 仅作数据留档与追溯，消息正文不渲染该链接——客户必须点开反馈入口进入网页后才能看到完整周报，避免"只读链接、不填反馈"。反馈入口文案默认「查看完整周报并反馈您的意见」（可用 `feedbackLinkText` 覆盖）。
 
 当传入 `riskMarkdown` 或 `nextWeekMarkdown` 时，卡片会分成「本周进展 / 风险 · 关注 / 下周重点」若干组（空块自动省略），让客户不点进网页也能看到本周做了什么、有什么风险、下周推进什么；只有进展时保持单一要点列表。
 
@@ -151,3 +155,4 @@ python3 scripts/weekly_report_tool.py gen-card \
 - 2026-09-01：回写 Webhook 升级 v2 落表 Schema（`respondentId`/`respondentNickname`/`feedbackTime`、`projects` 对象化、不满意原因条件必填），前端 payload 与回写 Python 同步。
 - 2026-09-03：新增「发送与确认规则」——回访消息默认发发起人本人预览；外发客户/群须发起人明确指定对象且确认内容全文，"直接发"也先经发起人确认；不再主动询问"发给谁"。
 - 2026-09-03：新增「打开」心跳（可选 `WEEKLY_FEEDBACK_VIEW_URL`）——页面加载静默上报 `view_weekly_feedback`，落「周报回访·查看日志」表，支持统计"已读未填"；明确反馈去重口径（同回访记录ID+提交人ID 取最新）。
+- 2026-09-03：对客文案与样式调整——标题统一「{客户或项目}周报」；三段摘要按客户视角书写（需客户配合写"需要贵司…"）；不满意选项「所得与期望效果不符合」改为「产品能力不满足期望」；勾选「其他」展开内联输入框并并入 `feedback`；底部输入框改名「更多反馈」；Markdown 消息不再外显完整周报链接，反馈入口文案改为「查看完整周报并反馈您的意见」。

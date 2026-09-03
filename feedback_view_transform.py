@@ -39,7 +39,8 @@ def main(params: dict):
     if view_env not in ("dingtalk", "anonymous"):
         view_env = "anonymous"
 
-    # 键名 = 「周报回访·查看日志」表列名，逐列对应；查看时间为 createdTime 自动记录，不映射
+    # 键名 = 「周报回访·查看日志」表列名，逐列对应；查看时间为 createdTime 自动记录（首次打开），不映射。
+    # 最后查看时间为可更新列：自动化流按「回访记录ID + 查看环境」upsert，重复打开只刷新该列与查看人。
     row = {
         "查看编号": "VIEW-%s-%d" % (submission_id, int(time.time() * 1000)),
         "回访记录ID": submission_id,
@@ -49,5 +50,6 @@ def main(params: dict):
         "查看人ID": _text(payload, "respondentId"),
         "查看环境": view_env,
         "交付PM": _text(payload, "collector"),
+        "最后查看时间": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     return {"rows": [row], "rowCount": 1}

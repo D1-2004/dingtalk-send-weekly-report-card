@@ -70,8 +70,6 @@ MARKDOWN_TEMPLATE = Template(
     """### $title
 > 周期：$report_period
 
-[$report_link_text]($report_url)
-
 $summary
 
 ---
@@ -503,13 +501,15 @@ def render_markdown(data: dict[str, Any]) -> str:
         summary = "\n\n".join(blocks)
     else:
         summary = "\n".join(f"- {line}" for line in sections[0][1])
+    # 完整周报链接（reportUrl）不外显：客户需点开反馈入口才能看到完整周报，
+    # 避免只读链接不填反馈。
     return MARKDOWN_TEMPLATE.substitute(
         title=data["title"],
         report_period=data["reportPeriod"],
-        report_link_text=data.get("reportLinkText", "查看周报详情"),
-        report_url=data["reportUrl"],
         summary=summary,
-        feedback_link_text=data.get("feedbackLinkText", "填写反馈"),
+        feedback_link_text=data.get(
+            "feedbackLinkText", "查看完整周报并反馈您的意见"
+        ),
         feedback_url=build_dingtalk_workbench_link(data["feedbackUrl"]),
     )
 

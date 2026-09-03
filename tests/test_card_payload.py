@@ -24,7 +24,7 @@ def html_data() -> dict:
     return {
         "schemaVersion": 2,
         "iconUrl": "https://img.alicdn.com/example.png",
-        "title": "维信诺项目回访",
+        "title": "维信诺周报",
         "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
         "reportLinkText": "查看完整周报",
         "summaryMarkdown": ["本周新增需求 **11** 项"],
@@ -52,16 +52,15 @@ def html_data() -> dict:
 def markdown_data() -> dict:
     return {
         "schemaVersion": 1,
-        "title": "维信诺项目周报回访",
+        "title": "维信诺周报",
         "reportPeriod": "2026年3月31日—2026年4月10日",
         "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
-        "reportLinkText": "查看本周服务报告",
         "summaryMarkdown": [
             "新增需求 **11** 项，其中 **2** 项已完成",
             "当前 **6** 个工单处理中，**2** 个已关闭",
         ],
         "feedbackUrl": "https://fde-workbench.dingtalk.com/sites/feedback-example",
-        "feedbackLinkText": "填写本周反馈",
+        "feedbackLinkText": "查看完整周报并反馈您的意见",
         "recipientName": "辰驷",
     }
 
@@ -406,8 +405,12 @@ class MarkdownDeliveryTests(unittest.TestCase):
         markdown = argv[argv.index("--content") + 1]
         self.assertEqual(records[0]["stdin"], "")
         self.assertLess(markdown.index(data["title"]), markdown.index(data["reportPeriod"]))
-        self.assertLess(markdown.index(data["reportPeriod"]), markdown.index(data["reportUrl"]))
-        self.assertLess(markdown.index(data["reportUrl"]), markdown.index(data["summaryMarkdown"][0]))
+        self.assertLess(
+            markdown.index(data["reportPeriod"]),
+            markdown.index(data["summaryMarkdown"][0]),
+        )
+        self.assertNotIn(data["reportUrl"], markdown)
+        self.assertIn(data["feedbackLinkText"], markdown)
         normalized_feedback_url = data["feedbackUrl"] + "/"
         feedback_deep_link = (
             "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="

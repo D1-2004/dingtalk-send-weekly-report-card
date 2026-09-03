@@ -48,5 +48,6 @@ def main(params: dict):
         "查看人": _text(payload, "respondentNickname"),
         "查看人ID": _text(payload, "respondentId"),
         "查看环境": view_env,
+        "交付PM": _text(payload, "collector"),
     }
     return {"rows": [row], "rowCount": 1}

@@ -125,9 +125,9 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 成功结果包含绝对 `output`、`runtimeOutput`、`siteRoot`、`siteFiles` 和实际 `submitUrl`。部署时必须打包 `siteRoot` 下的完整构建产物，不能只上传 `index.html`。使用托管地址时保留末尾 `/`，以便浏览器从站点目录正确解析相对资源；Markdown 命令会自动规范化 Multica Site 根地址。
 
-页面在钉钉容器内读取当前用户身份；身份读取失败时禁止提交。满意度为整页一组，选择「不满意」后才展开四项原因下钻。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
+页面在钉钉容器内读取当前用户身份用于实名提交；身份读取失败（浏览器/外部客户）时降级为匿名提交，提交人记「匿名客户」，不硬拦。满意度为整页一组，选择「不满意」后才展开四项原因下钻。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
 
-页面加载后还会向可选的 `WEEKLY_FEEDBACK_VIEW_URL` 静默上报一次「打开」心跳（`action=view_weekly_feedback`，钉钉内带身份、身份失败记匿名），落入「周报回访·查看日志」表，用于统计「已读未填」；未配置该环境变量时不打心跳。心跳协议见 `assets/weekly-feedback-view.schema.json`。
+页面加载后还会向可选的 `WEEKLY_FEEDBACK_VIEW_URL` 静默上报一次「打开」心跳（`action=view_weekly_feedback`，钉钉内记 `dingtalk`、浏览器记 `anonymous`，并带 `collector`），落入「周报回访·查看日志」表；未配置该环境变量时不打心跳。心跳协议见 `assets/weekly-feedback-view.schema.json`。「已读未填」= 存在匿名查看且反馈表无同 `回访记录ID` 提交；实名（钉钉内）查看视为内部预览，统计时排除。
 
 ### Markdown 消息
 

@@ -676,7 +676,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     elements.submitButton.textContent = "提交中…";
 
     try {
-      const feedbackUser = await getFeedbackUser();
+      let feedbackUser;
+      try {
+        feedbackUser = await getFeedbackUser();
+      } catch (identityError) {
+        feedbackUser = { userId: "anonymous", name: "匿名客户", avatar: "", corpId: "" };
+      }
       const payload = buildPayload(feedbackUser);
       const response = await fetch(params.callbackUrl, {
         method: "POST",
@@ -707,6 +712,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       submissionId: params.submissionId,
       customer: params.customer,
       week: params.week,
+      collector: params.collector,
       viewTime: new Date().toISOString(),
       respondentId: identity ? identity.userId : "",
       respondentNickname: identity ? identity.name || identity.userId : "",

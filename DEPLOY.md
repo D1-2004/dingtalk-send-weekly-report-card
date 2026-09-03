@@ -31,11 +31,13 @@
 - 正式 Webhook（2026-09-02 通过落表验收，验收记录 `AUTO-ACCEPT-20260902-001`）：`https://connector.dingtalk.com/webhook/flow/103b2bb12b6b212c3a440006`，触发关键词 `submit_weekly_feedback`，`Content-Type: application/json`。换表 / 换环境时把 `WEEKLY_FEEDBACK_SUBMIT_URL` 指向新流地址即可。
 - v2 落表 payload 要点：身份字段为 `respondentId` / `respondentNickname` / `feedbackTime`（ISO 8601）；`projects` 为 `{id,name}` 对象数组；满意度为「不满意」时 `dissatisfactionReasons` 至少一项。
 - 回写流 Python 节点的解析代码见仓库根目录 `feedback_webhook_transform.py`（输出键名与表列名一一对应，换表重建自动化流时直接复用）。
-- 查看心跳：页面加载后向 `WEEKLY_FEEDBACK_VIEW_URL` 静默 POST `action=view_weekly_feedback`（钉钉内带身份、失败记匿名），协议见 `assets/weekly-feedback-view.schema.json`，解析代码见 `feedback_view_transform.py`，落「周报回访·查看日志」表。统计「已读未填」= 查看日志有记录但反馈表无同 `回访记录ID` 提交记录。
+- 查看心跳：页面加载后向 `WEEKLY_FEEDBACK_VIEW_URL` 静默 POST `action=view_weekly_feedback`（钉钉内带身份记 `dingtalk`、浏览器记 `anonymous`，并带 `collector`），落「周报回访·查看日志」表（含 `交付PM` 列）。协议见 `assets/weekly-feedback-view.schema.json`，解析见 `feedback_view_transform.py`。
+- 身份与匿名：钉钉内打开自动取身份实名提交；浏览器取不到身份时**允许匿名提交**，提交人记「匿名客户」（`respondentId=anonymous`），不硬拦外部客户。
+- 「已读未填」口径：**匿名查看 = 客户行为；实名（钉钉内）查看 = 内部预览，排除**。即存在 `查看环境=anonymous` 的查看记录、且反馈表无同 `回访记录ID` 提交记录，记为已读未填。PM 自己预览或 PM 未发给客户，均不产生误报。
 - 反馈统计去重口径：同一 `回访记录ID + 提交人ID` 多次提交时，取 `客户反馈时间` 最新的一行；历史全量留痕。
 - 合同金额仅用于选项目 / 排序，**不写进页面数据、不展示给客户、不进 Webhook**。
 
 ## 5. 已知注意
 
 - 发送脚本用 `dws chat +dm --content`；若目标环境 dws 版本改用 `--text`，发送会报 `unknown flag`，届时把 `scripts/weekly_report_tool.py` 里 `run_dws_dm` 的 `--content` 改为 `--text`。
-- 反馈页在钉钉容器内读取当前用户身份，身份读取失败时禁止提交（防伪造）。
+- 反馈页在钉钉容器内读取当前用户身份用于实名；身份读取失败（浏览器/外部客户）时降级为**匿名提交**（记「匿名客户」），不硬拦。查看心跳以 `查看环境` 区分实名/匿名，供已读未填统计排除内部预览。

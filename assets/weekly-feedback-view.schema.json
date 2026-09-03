@@ -10,6 +10,7 @@
     "submissionId",
     "customer",
     "week",
+    "collector",
     "viewTime",
     "respondentId",
     "respondentNickname",
@@ -30,6 +31,9 @@
       "type": "string"
     },
     "week": {
+      "type": "string"
+    },
+    "collector": {
       "type": "string"
     },
     "viewTime": {

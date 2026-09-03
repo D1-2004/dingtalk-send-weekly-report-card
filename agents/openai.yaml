@@ -1,4 +1,4 @@
 interface:
   display_name: "钉钉周报回访"
   short_description: "生成反馈网页并发送默认 Markdown 周报回访消息"
-  default_prompt: "使用 $dingtalk-send-weekly-report-card 读取周报，先生成并通过 Multica 托管 HTML 反馈页，再把站点地址写入 Markdown 数据并调用 weekly_report_tool.py gen-card 发送默认 Markdown 回访消息。"
+  default_prompt: "使用 $dingtalk-send-weekly-report-card 读取周报，先生成并通过 Multica 托管 HTML 反馈页，再把站点地址写入 Markdown 数据并调用 weekly_report_tool.py gen-card 发送默认 Markdown 回访消息；消息默认发给发起人本人确认，发起人确认内容并明确指定外发对象后才外发给指定客户或群。"

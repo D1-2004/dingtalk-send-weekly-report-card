@@ -29,10 +29,21 @@ scripts/weekly_report_tool.py gen-card
 3. 按 Multica Site 当前托管协议打包并上传完整构建产物 ZIP。ZIP 应保持构建产物的目录结构，并以根目录的 `index.html` 作为默认入口；不要假设或写死其他文件名。
 4. 使用 Multica MCP 的 `prepare_static_site_deploy` 准备上传，完成上传后调用 `get_static_site_deploy`，确认部署状态为 `active` 并取得 `site_url`。
 5. 将 `site_url` 写入 Markdown 数据的 `feedbackUrl`。
-6. 调用 `gen-card`，省略 `--type` 即使用默认 `markdown` 完成发送。
-7. 只有 HTML 发布成功且 Markdown 命令返回 `success: true`，才回复用户“已发送，请查收”。
+6. 调用 `gen-card`，省略 `--type` 即使用默认 `markdown`，`recipientName` 默认填**发起人**，把回访消息发给发起人本人预览确认。
+7. 发起人确认内容、并明确指定外发对象（某客户/某群）后，才再次调用 `gen-card` 以指定接收人外发；发起人只说"发给客户"但尚未确认内容的，先把消息全文与反馈链接发给发起人确认。
+8. 只有 HTML 发布成功且 Markdown 命令返回 `success: true`，才回复用户“已发送，请查收”。
 
 HTML 发布失败时，不发送缺少反馈入口或使用本地文件地址的消息。
+
+## 发送与确认规则
+
+本规则优先级高于任何"发给谁"的临时表述，目的是让 PM 放心生成内容：默认情况下没有任何消息会离开 PM 本人。
+
+1. **发起人 = 默认接收人**：谁提供周报、要求生成客户反馈，谁就是发起人（通常是 PM）。生成完成后，回访消息默认发给发起人本人预览，**不主动询问"发给谁"**，更不直接发给客户或群。
+2. **外发 = 明确指定 + 内容确认**：只有发起人明确指定外发对象（某客户/某群），且已确认生成的消息全文与反馈链接后，才允许向指定对象外发。两个条件缺一不可。
+3. **"直接发给客户"也要先确认**：即使发起人说"不用我看，直接发给客户"，仍先把消息全文发给发起人确认一次；发起人回复确认后才外发。
+4. **确认即所见**：发给发起人确认的内容必须是客户将看到的完整 Markdown 与反馈链接，不摘要、不省略。
+5. 未获确认、或发起人改主意时，消息只停留在发起人处；外发动作不执行、不重试、不换个对象再发。
 
 ## 项目底表与关联
 
@@ -76,7 +87,7 @@ HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL`，值为 `https://
 | 下周重点 `nextWeekMarkdown` | 从周报"下周计划"提炼 2–4 条将推进事项，客户视角可读、可验收，可为空数组；不编造 |
 | 项目列表 `projects` | 从周报提取、去重、按合同金额降序；每项仅含 `id`、`name`，数量动态不写死 |
 | `collector` | 发起本次生成或发送任务的用户，不是 Agent 或机器人 |
-| 接收人 | 用户明确指定的姓名或花名；未指定时询问，不猜测 |
+| 接收人 | 默认发起人（提供周报者，见「发送与确认规则」）；发起人确认内容并明确指定外发对象后才填其指定的客户/群；不主动询问"发给谁"、不猜测 |
 | `reportTime` | 当前生成时间，格式 `YYYY-MM-DD HH:mm:ss` |
 
 使用当前 Agent 已有的文档读取能力获取周报正文；读取失败时请求授权或让用户粘贴正文，不根据标题猜测正文。
@@ -118,7 +129,7 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 ### Markdown 消息
 
-Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。
+Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。`recipientName` 默认填发起人（谁给周报就发给谁确认），外发客户/群的唯一例外见「发送与确认规则」。
 
 当传入 `riskMarkdown` 或 `nextWeekMarkdown` 时，卡片会分成「本周进展 / 风险 · 关注 / 下周重点」若干组（空块自动省略），让客户不点进网页也能看到本周做了什么、有什么风险、下周推进什么；只有进展时保持单一要点列表。
 
@@ -135,4 +146,5 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 - 2026-08-30：HTML 产物改为入口文件加同源 JavaScript 构建资源，原因是 Multica Site 的严格 CSP 会阻止内联可执行脚本，导致页面只能显示静态布局。
 - 2026-08-31：样式与信息结构升级——头部去掉依赖外链的客户 logo 改用内联图标、PC/移动端字号与间距收紧、摘要拆「本周进展 + 风险 · 关注」两块（新增可选 `riskMarkdown`）、满意度改为两个大按钮、不满意下钻固定四项；`iconUrl` 转为可选。明确以 LTC 项目底表关联项目并按合同金额降序排序（金额仅内部排序用，不外发）。
-- 2026-08-31：摘要升级为三段式「本周进展 / 风险 · 关注 / 下周重点」，新增可选 `nextWeekMarkdown`（蓝色 callout，空则不显示），卡片与网页同步；本周进展强调先写可交付成果而非流水数字。
+- 2026-09-01：回写 Webhook 升级 v2 落表 Schema（`respondentId`/`respondentNickname`/`feedbackTime`、`projects` 对象化、不满意原因条件必填），前端 payload 与回写 Python 同步。
+- 2026-09-03：新增「发送与确认规则」——回访消息默认发发起人本人预览；外发客户/群须发起人明确指定对象且确认内容全文，"直接发"也先经发起人确认；不再主动询问"发给谁"。

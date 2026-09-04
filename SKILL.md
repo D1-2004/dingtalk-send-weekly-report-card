@@ -134,7 +134,9 @@ python3 scripts/weekly_report_tool.py gen-card \
 
 页面在钉钉容器内读取当前用户身份用于实名提交；身份读取失败（浏览器/外部客户）时降级为匿名提交，提交人记「匿名客户」，不硬拦。满意度为整页一组，选择「不满意」后才展开四项原因下钻；勾选「其他」时在其后展开一行内联输入框，客户填写的内容在提交时并入 `feedback` 字段（格式「其他：…」，与「更多反馈」内容同段换行分隔），不新增协议字段，落表仍走「其他备注」列。页面底部的补充输入框标题为「更多反馈」。Webhook 请求必须符合 `assets/weekly-feedback-webhook.schema.json`，一次表单提交对应一次请求。
 
-页面 `load` 事件触发时向 `WEEKLY_FEEDBACK_READ_URL` 静默上报一次已读状态，不等待钉钉身份读取。已读报文由「基础信息 + `keyword=weekly_report_mark_read` + `isRead=true`」组成，协议见 `assets/weekly-feedback-read.schema.json`；反馈报文由同一份基础信息与反馈信息组成。两条自动化都以「编号 = `outTrackId`」查找记录：存在则更新，不存在则新增。已读流程只更新基础信息和「是否已读」，反馈流程只更新基础信息和反馈字段，禁止清空另一部分已经写入的数据。
+页面 `load` 事件触发时向 `WEEKLY_FEEDBACK_READ_URL` 静默上报一次已读状态，不等待钉钉身份读取。两类报文顶层均保留触发标识、`schemaVersion` 和 `outTrackId`；反馈使用单元素 `rows`，已读使用单对象 `row`。前端把行对象直接拼成与表格列同名的记录，其中 `编号` 等于 `outTrackId`，项目、摘要、选项和原因等列表已转换为可落表文本。协议分别见 `assets/weekly-feedback-read.schema.json` 和 `assets/weekly-feedback-webhook.schema.json`。反馈自动化的原生循环消费 Webhook 的 `rows`，已读自动化直接引用 Webhook 的 `row`，均不使用脚本解析节点，并以「编号 = `outTrackId`」查找记录：存在则更新，不存在则新增。已读流程只更新基础信息和「是否已读」，反馈流程只更新基础信息和反馈字段，禁止清空另一部分已经写入的数据。
+
+Webhook 成功响应只表示请求已受理，自动化执行是异步的。使用 curl 模拟“先已读、后反馈”时，等待已读自动化执行完成后再投反馈（建议间隔 5 秒）；真实页面中用户填写反馈天然提供了该间隔。若两条请求真正并发到达，“先查后增”不是原子操作，可能生成重复行，不能把零间隔双投递作为幂等保证。
 
 ### Markdown 消息
 

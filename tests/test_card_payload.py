@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import importlib.util
 import os
 import re
 import subprocess
@@ -67,33 +66,6 @@ def markdown_data() -> dict:
         "feedbackLinkText": "查看完整周报并反馈您的意见",
         "recipientName": "辰驷",
     }
-
-
-def webhook_base(out_track_id: str = "track-001") -> dict:
-    data = html_data()
-    return {
-        "schemaVersion": 2,
-        "outTrackId": out_track_id,
-        "reportUrl": data["reportUrl"],
-        "summaryMarkdown": data["summaryMarkdown"],
-        "riskMarkdown": [],
-        "nextWeekMarkdown": [],
-        "projects": data["projects"],
-        "dissatisfactionOptions": data["dissatisfactionOptions"],
-        "reportPeriod": data["reportPeriod"],
-        "customer": data["customer"],
-        "week": data["week"],
-        "collector": data["collector"],
-        "reportTime": data["reportTime"],
-    }
-
-
-def load_transform(filename: str, module_name: str):
-    spec = importlib.util.spec_from_file_location(module_name, SKILL_DIR / filename)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def make_fake_dws(directory: Path) -> Path:
@@ -246,37 +218,18 @@ class SimplifiedSkillTests(unittest.TestCase):
 
         self.assertEqual(schema["properties"]["action"]["const"], "submit_weekly_feedback")
         self.assertEqual(schema["properties"]["schemaVersion"]["const"], 2)
-        self.assertTrue(
-            {
-                "outTrackId",
-                "reportUrl",
-                "summaryMarkdown",
-                "riskMarkdown",
-                "nextWeekMarkdown",
-                "projects",
-                "satisfaction",
-                "dissatisfactionReasons",
-                "feedback",
-                "dissatisfactionOptions",
-                "reportPeriod",
-                "customer",
-                "week",
-                "collector",
-                "reportTime",
-                "respondentId",
-                "respondentNickname",
-                "feedbackTime",
-            }.issubset(set(schema["required"]))
-        )
+        self.assertEqual(set(schema["required"]), {"action", "schemaVersion", "outTrackId", "rows"})
         self.assertFalse(schema["additionalProperties"])
-        self.assertNotIn("feedbackUserId", schema["properties"])
-        self.assertNotIn("feedbackUserName", schema["properties"])
         self.assertNotIn("submissionId", schema["properties"])
-        self.assertEqual(
-            sorted(schema["properties"]["projects"]["items"]["required"]),
-            ["id", "name"],
-        )
-        self.assertTrue(schema["allOf"], "不满意时原因至少一项的条件约束应保留")
+        rows = schema["properties"]["rows"]
+        self.assertEqual(rows["minItems"], 1)
+        self.assertEqual(rows["maxItems"], 1)
+        row = rows["items"]
+        self.assertEqual(row["properties"]["项目"]["type"], "string")
+        self.assertEqual(row["properties"]["本周进展"]["type"], "string")
+        self.assertEqual(row["properties"]["不满意原因"]["type"], "string")
+        self.assertEqual(row["properties"]["编号"]["minLength"], 1)
+        self.assertTrue(row["allOf"], "不满意时原因文本不能为空")
 
     def test_read_schema_combines_base_data_with_read_status(self) -> None:
         schema_path = SKILL_DIR / "assets" / "weekly-feedback-read.schema.json"
@@ -286,25 +239,13 @@ class SimplifiedSkillTests(unittest.TestCase):
             schema["properties"]["keyword"]["const"],
             "weekly_report_mark_read",
         )
-        self.assertTrue(
-            {
-                "outTrackId",
-                "reportUrl",
-                "summaryMarkdown",
-                "riskMarkdown",
-                "nextWeekMarkdown",
-                "projects",
-                "dissatisfactionOptions",
-                "reportPeriod",
-                "customer",
-                "week",
-                "collector",
-                "reportTime",
-                "isRead",
-            }.issubset(set(schema["required"]))
-        )
+        self.assertEqual(set(schema["required"]), {"keyword", "schemaVersion", "outTrackId", "row"})
         self.assertNotIn("submissionId", schema["properties"])
-        self.assertNotIn("respondentId", schema["properties"])
+        row = schema["properties"]["row"]
+        self.assertEqual(row["properties"]["项目"]["type"], "string")
+        self.assertEqual(row["properties"]["本周进展"]["type"], "string")
+        self.assertEqual(row["properties"]["是否已读"]["const"], "是")
+        self.assertNotIn("反馈人ID", row["properties"])
         self.assertFalse(schema["additionalProperties"])
 
     def test_agent_prompt_only_calls_gen_card(self) -> None:
@@ -312,51 +253,6 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertIn("gen-card", prompt)
         self.assertNotIn("按 DWS 流程", prompt)
         self.assertNotIn("dws api", prompt)
-
-
-class WebhookTransformTests(unittest.TestCase):
-    def test_feedback_transform_writes_base_and_feedback_fields_only(self) -> None:
-        transform = load_transform(
-            "feedback_webhook_transform.py", "feedback_webhook_transform_test"
-        )
-        payload = {
-            "action": "submit_weekly_feedback",
-            **webhook_base(),
-            "satisfaction": "不满意",
-            "dissatisfactionReasons": ["沟通响应不及时"],
-            "feedback": "希望及时同步进度",
-            "respondentId": "user-001",
-            "respondentNickname": "测试用户",
-            "feedbackTime": "2026-09-03T22:48:00+08:00",
-        }
-
-        result = transform.main({"payload": json.dumps(payload, ensure_ascii=False)})
-        row = result["rows"][0]
-
-        self.assertEqual(row["编号"], "track-001")
-        self.assertEqual(row["是否满意"], "不满意")
-        self.assertEqual(row["不满意原因"], "沟通响应不及时")
-        self.assertEqual(row["反馈人ID"], "user-001")
-        self.assertNotIn("是否已读", row)
-
-    def test_read_transform_writes_base_and_read_fields_only(self) -> None:
-        transform = load_transform(
-            "feedback_read_transform.py", "feedback_read_transform_test"
-        )
-        payload = {
-            "keyword": "weekly_report_mark_read",
-            **webhook_base(),
-            "isRead": True,
-        }
-
-        result = transform.main({"payload": payload})
-        row = result["row"]
-
-        self.assertEqual(row["编号"], "track-001")
-        self.assertEqual(row["客户"], "维信诺")
-        self.assertEqual(row["是否已读"], "是")
-        self.assertNotIn("是否满意", row)
-        self.assertNotIn("具体反馈", row)
 
 
 class HtmlGenerationTests(unittest.TestCase):
@@ -401,8 +297,14 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertEqual(command_result["readUrl"], READ_WEBHOOK_URL)
         self.assertIn("reportReadOnLoad", generated_runtime)
         self.assertIn("weekly_report_mark_read", generated_runtime)
-        self.assertIn("isRead: true", generated_runtime)
+        self.assertIn('"是否已读": "是"', generated_runtime)
+        self.assertIn('"编号": params.outTrackId', generated_runtime)
         self.assertIn("outTrackId: params.outTrackId", generated_runtime)
+        self.assertIn("rows: [{", generated_runtime)
+        self.assertIn("row: {", generated_runtime)
+        self.assertIn('(params.summaryMarkdown || []).join("\\n")', generated_runtime)
+        self.assertIn('"项目": JSON.stringify(', generated_runtime)
+        self.assertIn('"不满意原因": state.dissatisfactionReasons.join("；")', generated_runtime)
         self.assertIn(
             'window.addEventListener("load", reportReadOnLoad, { once: true });',
             generated_runtime,
@@ -432,10 +334,10 @@ class HtmlGenerationTests(unittest.TestCase):
         )
         self.assertIn("feedbackUser", generated_runtime)
         self.assertIn("dissatisfactionReasons", generated_runtime)
-        self.assertIn("feedback: state.feedback", generated_runtime)
-        self.assertIn("respondentId: feedbackUser.userId", generated_runtime)
-        self.assertIn("respondentNickname", generated_runtime)
-        self.assertIn("feedbackTime: new Date().toISOString()", generated_runtime)
+        self.assertIn('"具体反馈": state.feedback', generated_runtime)
+        self.assertIn('"反馈人ID": feedbackUser.userId', generated_runtime)
+        self.assertIn('"反馈人昵称"', generated_runtime)
+        self.assertIn('"反馈时间": new Date().toISOString()', generated_runtime)
         self.assertNotIn("feedbackUserId", generated_runtime)
         self.assertNotIn("feedbackUserName", generated_runtime)
         self.assertNotIn("projectRows", generated_runtime)

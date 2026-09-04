@@ -654,34 +654,40 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     return state.identityPromise;
   }
 
-  function buildBasePayload() {
+  function buildBaseRow() {
     return {
-      schemaVersion: 2,
-      outTrackId: params.outTrackId,
-      reportUrl: params.reportUrl,
-      summaryMarkdown: params.summaryMarkdown || [],
-      riskMarkdown: params.riskMarkdown || [],
-      nextWeekMarkdown: params.nextWeekMarkdown || [],
-      reportPeriod: params.reportPeriod,
-      customer: params.customer,
-      week: params.week,
-      projects: state.projects.map((project) => ({ id: project.id, name: project.name })),
-      dissatisfactionOptions: params.dissatisfactionOptions || [],
-      collector: params.collector,
-      reportTime: params.reportTime,
+      "编号": params.outTrackId,
+      "客户": params.customer,
+      "项目": JSON.stringify(
+        state.projects.map((project) => ({ id: project.id, name: project.name })),
+      ),
+      "周次": params.week,
+      "收集人": params.collector,
+      "周报链接": params.reportUrl,
+      "周报周期": params.reportPeriod,
+      "周报时间": params.reportTime,
+      "数据版本": 2,
+      "本周进展": (params.summaryMarkdown || []).join("\n"),
+      "风险关注": (params.riskMarkdown || []).join("\n"),
+      "下周重点": (params.nextWeekMarkdown || []).join("\n"),
+      "不满意原因选项": JSON.stringify(params.dissatisfactionOptions || []),
     };
   }
 
   function buildFeedbackPayload(feedbackUser) {
     return {
       action: "submit_weekly_feedback",
-      ...buildBasePayload(),
-      satisfaction: state.satisfaction,
-      dissatisfactionReasons: [...state.dissatisfactionReasons],
-      feedback: state.feedback,
-      respondentId: feedbackUser.userId,
-      respondentNickname: feedbackUser.name || feedbackUser.userId,
-      feedbackTime: new Date().toISOString(),
+      schemaVersion: 2,
+      outTrackId: params.outTrackId,
+      rows: [{
+        ...buildBaseRow(),
+        "是否满意": state.satisfaction,
+        "不满意原因": state.dissatisfactionReasons.join("；"),
+        "具体反馈": state.feedback,
+        "反馈人ID": feedbackUser.userId,
+        "反馈人昵称": feedbackUser.name || feedbackUser.userId,
+        "反馈时间": new Date().toISOString(),
+      }],
     };
   }
 
@@ -762,8 +768,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     if (!url) return;
     const payload = {
       keyword: "weekly_report_mark_read",
-      ...buildBasePayload(),
-      isRead: true,
+      schemaVersion: 2,
+      outTrackId: params.outTrackId,
+      row: {
+        ...buildBaseRow(),
+        "是否已读": "是",
+      },
     };
     fetch(url, {
       method: "POST",

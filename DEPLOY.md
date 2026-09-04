@@ -29,12 +29,14 @@
 - 反馈页样式由 `assets/weekly-feedback-template.html` 固定；内容结构由 `assets/weekly-report-briefing.schema.json`（进展 / 风险 / 下周重点三段）约束，脚本 `weekly_report_tool.py` 引用它作为单一真源。
 - 客户提交的回写格式见 `assets/weekly-feedback-webhook.schema.json`。
 - 两条 Webhook 都使用 `Content-Type: application/json`。反馈触发词为 `submit_weekly_feedback`；已读触发词为 `weekly_report_mark_read`。
-- v2 基础信息包含 `schemaVersion`、`outTrackId`、周报链接与三段摘要、项目、不满意原因选项、周期、客户、周次、收集人和周报时间。`outTrackId` 写入表格主键「编号」。
-- 反馈报文在基础信息上追加 `satisfaction`、`dissatisfactionReasons`、`feedback`、`respondentId`、`respondentNickname`、`feedbackTime`；不满意时原因至少一项。协议和解析代码分别见 `assets/weekly-feedback-webhook.schema.json`、`feedback_webhook_transform.py`。
-- 已读报文在基础信息上追加 `keyword=weekly_report_mark_read`、`isRead`，在页面 `load` 事件触发时发送，不等待身份接口。协议和解析代码分别见 `assets/weekly-feedback-read.schema.json`、`feedback_read_transform.py`。
+- v2 顶层只保留触发标识、`schemaVersion`、`outTrackId` 和表格行数据。反馈使用单元素 `rows`，已读使用单对象 `row`；行对象已由前端拼成与表格列同名的记录，`编号` 与顶层 `outTrackId` 使用同一个值，项目和列表字段已经序列化为文本。
+- 反馈报文的 `rows[0]` 包含基础信息与「是否满意 / 不满意原因 / 具体反馈 / 反馈人ID / 反馈人昵称 / 反馈时间」；不满意时原因文本不能为空。协议见 `assets/weekly-feedback-webhook.schema.json`。
+- 已读报文的 `row` 包含基础信息与「是否已读=是」，在页面 `load` 事件触发时发送，不等待身份接口。协议见 `assets/weekly-feedback-read.schema.json`。
+- 反馈自动化的原生循环直接消费 Webhook 的 `rows`；已读自动化直接引用 Webhook 的 `row`，两者都不使用 Python 或其他脚本解析节点。
 - 两条自动化都按「编号 = `outTrackId`」查找后 upsert：反馈流程仅更新基础信息与反馈字段；已读流程仅更新基础信息与「是否已读」。这样无论两个请求的到达顺序如何，都只保留同一行并避免互相清空字段。
 - 身份与匿名：钉钉内打开自动取身份实名提交；浏览器取不到身份时**允许匿名提交**，提交人记「匿名客户」（`respondentId=anonymous`），不硬拦外部客户。
 - 同一 `outTrackId` 的重复上报更新原行，不新增重复记录。
+- 钉钉 Webhook 返回成功仅表示已受理，自动化仍在异步执行。联调用 curl 连续模拟“页面已读 → 人工反馈”时，两次请求之间至少等待前一条执行记录完成（建议 5 秒）；生产页面中用户填写表单天然提供了这个间隔。两条请求真正并发到达时，底表的“先查后增”不是原子操作，可能出现重复行。
 - 不满意原因固定四项：`产品能力不满足期望`、`交付进度不满意`、`沟通响应不及时`、`其他`（首项 2026-09-03 由「所得与期望效果不符合」改名，AI 表格多选项同步改名，选项 ID 不变）。勾选「其他」时页面展开内联输入框，内容并入 `feedback`（格式「其他：…」），落表仍走「其他备注」列。
 - Markdown 回访消息正文**不外显完整周报链接**（`reportUrl` 仅留档），反馈入口文案默认「查看完整周报并反馈您的意见」；客户点进反馈页后才可见完整周报链接。
 - Markdown 消息**只外显本周进展要点（最多 3 条）**+ 末尾「- 更多信息……」；风险 / 下周重点即使传入也不在 IM 里挤屏，仍在反馈页完整呈现。三段摘要 schema 收 maxItems=3、单条 ≤ 120 字，文字精炼引导点链接看完整周报。

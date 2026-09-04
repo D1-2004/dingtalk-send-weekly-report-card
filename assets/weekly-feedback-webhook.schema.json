@@ -4,151 +4,50 @@
   "title": "WeeklyFeedbackWebhookPayload",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "action",
-    "schemaVersion",
-    "outTrackId",
-    "reportUrl",
-    "summaryMarkdown",
-    "riskMarkdown",
-    "nextWeekMarkdown",
-    "projects",
-    "satisfaction",
-    "dissatisfactionReasons",
-    "feedback",
-    "dissatisfactionOptions",
-    "reportPeriod",
-    "customer",
-    "week",
-    "collector",
-    "reportTime",
-    "respondentId",
-    "respondentNickname",
-    "feedbackTime"
-  ],
+  "required": ["action", "schemaVersion", "outTrackId", "rows"],
   "properties": {
-    "action": {
-      "const": "submit_weekly_feedback"
-    },
-    "schemaVersion": {
-      "const": 2
-    },
-    "outTrackId": {
-      "type": "string",
-      "minLength": 1
-    },
-    "reportUrl": {
-      "type": "string"
-    },
-    "summaryMarkdown": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "riskMarkdown": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "nextWeekMarkdown": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "projects": {
+    "action": { "const": "submit_weekly_feedback" },
+    "schemaVersion": { "const": 2 },
+    "outTrackId": { "type": "string", "minLength": 1 },
+    "rows": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "id",
-          "name"
+          "编号", "客户", "项目", "周次", "收集人", "周报链接", "周报周期",
+          "周报时间", "数据版本", "本周进展", "风险关注", "下周重点",
+          "不满意原因选项", "是否满意", "不满意原因", "具体反馈",
+          "反馈人ID", "反馈人昵称", "反馈时间"
         ],
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      }
-    },
-    "satisfaction": {
-      "enum": [
-        "满意",
-        "不满意"
-      ]
-    },
-    "dissatisfactionReasons": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
-    "feedback": {
-      "type": "string"
-    },
-    "dissatisfactionOptions": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "reportPeriod": {
-      "type": "string"
-    },
-    "customer": {
-      "type": "string",
-      "minLength": 1
-    },
-    "week": {
-      "type": "string",
-      "minLength": 1
-    },
-    "collector": {
-      "type": "string",
-      "minLength": 1
-    },
-    "reportTime": {
-      "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
-    },
-    "respondentId": {
-      "type": "string",
-      "minLength": 1
-    },
-    "respondentNickname": {
-      "type": "string",
-      "minLength": 1
-    },
-    "feedbackTime": {
-      "type": "string",
-      "format": "date-time"
-    }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "satisfaction": {
-            "const": "不满意"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "dissatisfactionReasons": {
-            "minItems": 1
-          }
-        }
+          "编号": { "type": "string", "minLength": 1 },
+          "客户": { "type": "string", "minLength": 1 },
+          "项目": { "type": "string", "minLength": 1, "contentMediaType": "application/json" },
+          "周次": { "type": "string", "minLength": 1 },
+          "收集人": { "type": "string", "minLength": 1 },
+          "周报链接": { "type": "string", "minLength": 1 },
+          "周报周期": { "type": "string" },
+          "周报时间": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$" },
+          "数据版本": { "const": 2 },
+          "本周进展": { "type": "string" },
+          "风险关注": { "type": "string" },
+          "下周重点": { "type": "string" },
+          "不满意原因选项": { "type": "string", "contentMediaType": "application/json" },
+          "是否满意": { "enum": ["满意", "不满意"] },
+          "不满意原因": { "type": "string" },
+          "具体反馈": { "type": "string" },
+          "反馈人ID": { "type": "string", "minLength": 1 },
+          "反馈人昵称": { "type": "string", "minLength": 1 },
+          "反馈时间": { "type": "string", "format": "date-time" }
+        },
+        "allOf": [{
+          "if": { "properties": { "是否满意": { "const": "不满意" } } },
+          "then": { "properties": { "不满意原因": { "minLength": 1 } } }
+        }]
       }
     }
-  ]
+  }
 }

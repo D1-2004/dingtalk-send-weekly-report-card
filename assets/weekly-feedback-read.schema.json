@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/schemas/weekly-feedback-webhook-v2.json",
-  "title": "WeeklyFeedbackWebhookPayload",
+  "$id": "https://example.local/schemas/weekly-feedback-read-v2.json",
+  "title": "WeeklyFeedbackReadPayload",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "action",
+    "keyword",
     "schemaVersion",
     "outTrackId",
     "reportUrl",
@@ -13,22 +13,17 @@
     "riskMarkdown",
     "nextWeekMarkdown",
     "projects",
-    "satisfaction",
-    "dissatisfactionReasons",
-    "feedback",
     "dissatisfactionOptions",
     "reportPeriod",
     "customer",
     "week",
     "collector",
     "reportTime",
-    "respondentId",
-    "respondentNickname",
-    "feedbackTime"
+    "isRead"
   ],
   "properties": {
-    "action": {
-      "const": "submit_weekly_feedback"
+    "keyword": {
+      "const": "weekly_report_mark_read"
     },
     "schemaVersion": {
       "const": 2
@@ -38,7 +33,8 @@
       "minLength": 1
     },
     "reportUrl": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "summaryMarkdown": {
       "type": "array",
@@ -79,22 +75,6 @@
         }
       }
     },
-    "satisfaction": {
-      "enum": [
-        "满意",
-        "不满意"
-      ]
-    },
-    "dissatisfactionReasons": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
-    "feedback": {
-      "type": "string"
-    },
     "dissatisfactionOptions": {
       "type": "array",
       "items": {
@@ -120,35 +100,8 @@
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
     },
-    "respondentId": {
-      "type": "string",
-      "minLength": 1
-    },
-    "respondentNickname": {
-      "type": "string",
-      "minLength": 1
-    },
-    "feedbackTime": {
-      "type": "string",
-      "format": "date-time"
+    "isRead": {
+      "type": "boolean"
     }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "satisfaction": {
-            "const": "不满意"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "dissatisfactionReasons": {
-            "minItems": 1
-          }
-        }
-      }
-    }
-  ]
+  }
 }

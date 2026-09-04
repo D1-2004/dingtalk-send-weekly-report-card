@@ -297,8 +297,9 @@
         "week": "2026-W15",
         "collector": "辰驷",
         "reportTime": "2026-08-30 07:00:00",
-        "submissionId": "WEB-FORM-2026-W15",
+        "outTrackId": "WEB-FORM-2026-W15",
         "callbackUrl": "",
+        "readCallbackUrl": "",
         "callbackHeaders": {},
         "formDisabled": false
       }
@@ -384,7 +385,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       "week",
       "collector",
       "reportTime",
-      "submissionId",
+      "outTrackId",
     ].forEach((field) => {
       if (typeof source[field] !== "string" || !source[field].trim()) {
         throw new Error(`${field} 必须是非空字符串`);
@@ -455,6 +456,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     if (source.callbackUrl !== undefined && typeof source.callbackUrl !== "string") {
       throw new Error("callbackUrl 必须是字符串");
     }
+    if (
+      source.readCallbackUrl !== undefined &&
+      typeof source.readCallbackUrl !== "string"
+    ) {
+      throw new Error("readCallbackUrl 必须是字符串");
+    }
     if (source.formDisabled !== undefined && typeof source.formDisabled !== "boolean") {
       throw new Error("formDisabled 必须是布尔值");
     }
@@ -467,6 +474,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       dissatisfactionReasons: [],
       feedback: "",
       callbackUrl: "",
+      readCallbackUrl: "",
       callbackHeaders: {},
       formDisabled: false,
       ...source,
@@ -646,11 +654,10 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     return state.identityPromise;
   }
 
-  function buildPayload(feedbackUser) {
+  function buildBasePayload() {
     return {
       schemaVersion: 2,
-      action: "submit_weekly_feedback",
-      submissionId: params.submissionId,
+      outTrackId: params.outTrackId,
       reportUrl: params.reportUrl,
       summaryMarkdown: params.summaryMarkdown || [],
       riskMarkdown: params.riskMarkdown || [],
@@ -659,12 +666,19 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       customer: params.customer,
       week: params.week,
       projects: state.projects.map((project) => ({ id: project.id, name: project.name })),
-      satisfaction: state.satisfaction,
-      dissatisfactionReasons: [...state.dissatisfactionReasons],
-      feedback: state.feedback,
       dissatisfactionOptions: params.dissatisfactionOptions || [],
       collector: params.collector,
       reportTime: params.reportTime,
+    };
+  }
+
+  function buildFeedbackPayload(feedbackUser) {
+    return {
+      action: "submit_weekly_feedback",
+      ...buildBasePayload(),
+      satisfaction: state.satisfaction,
+      dissatisfactionReasons: [...state.dissatisfactionReasons],
+      feedback: state.feedback,
       respondentId: feedbackUser.userId,
       respondentNickname: feedbackUser.name || feedbackUser.userId,
       feedbackTime: new Date().toISOString(),
@@ -722,7 +736,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       } catch (identityError) {
         feedbackUser = { userId: "anonymous", name: "匿名客户", avatar: "", corpId: "" };
       }
-      const payload = buildPayload(feedbackUser);
+      const payload = buildFeedbackPayload(feedbackUser);
       const response = await fetch(params.callbackUrl, {
         method: "POST",
         headers: {
@@ -743,20 +757,13 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     }
   }
 
-  function sendViewBeacon(identity) {
-    const url = params.viewCallbackUrl;
+  function reportReadOnLoad() {
+    const url = params.readCallbackUrl;
     if (!url) return;
     const payload = {
-      schemaVersion: 2,
-      action: "view_weekly_feedback",
-      submissionId: params.submissionId,
-      customer: params.customer,
-      week: params.week,
-      collector: params.collector,
-      viewTime: new Date().toISOString(),
-      respondentId: identity ? identity.userId : "",
-      respondentNickname: identity ? identity.name || identity.userId : "",
-      viewEnv: identity ? "dingtalk" : "anonymous",
+      keyword: "weekly_report_mark_read",
+      ...buildBasePayload(),
+      isRead: true,
     };
     fetch(url, {
       method: "POST",
@@ -783,10 +790,8 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     renderReadOnlyContext();
     renderSatisfaction();
     renderReasons();
+    window.addEventListener("load", reportReadOnLoad, { once: true });
     state.identityPromise = loadFeedbackUser();
-    state.identityPromise
-      .then((user) => sendViewBeacon(user))
-      .catch(() => sendViewBeacon(null));
     state.identityPromise.catch((error) => {
       console.error("周报反馈页获取当前用户失败", error);
     });

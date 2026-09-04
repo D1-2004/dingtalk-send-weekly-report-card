@@ -44,7 +44,7 @@ HTML_RUNTIME_FILENAME = "weekly-feedback-app.js"
 DATA_BLOCK_START = '<script type="application/json" id="weeklyFeedbackFormData">'
 DATA_BLOCK_END = "</script>"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
-VIEW_URL_ENV = "WEEKLY_FEEDBACK_VIEW_URL"
+READ_URL_ENV = "WEEKLY_FEEDBACK_READ_URL"
 AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
 AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -91,8 +91,9 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         "week",
         "collector",
         "reportTime",
-        "submissionId",
+        "outTrackId",
         "callbackUrl",
+        "readCallbackUrl",
     ],
     "properties": {
         "schemaVersion": {"const": 2},
@@ -126,15 +127,16 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         "week": {"type": "string", "minLength": 1, "maxLength": 50},
         "collector": {"type": "string", "minLength": 1, "maxLength": 100},
         "reportTime": {"type": "string", "minLength": 1, "maxLength": 50},
-        "submissionId": {"type": "string", "minLength": 1, "maxLength": 120},
+        "outTrackId": {"type": "string", "minLength": 1, "maxLength": 120},
         "callbackUrl": {
             "type": "string",
             "minLength": 1,
             "pattern": "^https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128}$",
         },
-        "viewCallbackUrl": {
+        "readCallbackUrl": {
             "type": "string",
-            "pattern": "^(|https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128})$",
+            "minLength": 1,
+            "pattern": "^https://connector\\.dingtalk\\.com/webhook/flow/[A-Za-z0-9_-]{1,128}$",
         },
         "callbackHeaders": {
             "type": "object",
@@ -283,11 +285,11 @@ def require_submit_url() -> str:
     return value
 
 
-def optional_view_url() -> str:
-    value = os.environ.get(VIEW_URL_ENV, "")
+def require_read_url() -> str:
+    value = os.environ.get(READ_URL_ENV, "")
     if not value:
-        return ""
-    validate_aitable_webhook_url(value, VIEW_URL_ENV)
+        raise ToolError(f"missing environment variable: {READ_URL_ENV}")
+    validate_aitable_webhook_url(value, READ_URL_ENV)
     return value
 
 
@@ -406,13 +408,13 @@ def write_output(output_value: str, content: str) -> Path:
     return output_path
 
 
-def configure_html_runtime(template: str, submit_url: str) -> str:
+def configure_html_runtime(template: str, submit_url: str, read_url: str) -> str:
     placeholder = "__WEEKLY_FEEDBACK_PROXY_ALLOWLIST__"
     if template.count(placeholder) != 1:
         raise ToolError("template must contain one feedback proxy allowlist placeholder")
     return template.replace(
         placeholder,
-        json.dumps([submit_url], ensure_ascii=False),
+        json.dumps(list(dict.fromkeys([submit_url, read_url])), ensure_ascii=False),
         1,
     )
 
@@ -471,7 +473,7 @@ def gen_html_card(
         ) from error
     rendered = replace_data_block(template, data)
     rendered = replace_html_title(rendered, data["title"])
-    configured = configure_html_runtime(rendered, submit_url)
+    configured = configure_html_runtime(rendered, submit_url, data["readCallbackUrl"])
     generated_html, generated_runtime = externalize_html_runtime(configured)
 
     output_path = Path(args.output).expanduser()
@@ -493,6 +495,7 @@ def gen_html_card(
         "siteRoot": str(output_path.parent.resolve()),
         "siteFiles": [output_path.name, runtime_path.name],
         "submitUrl": submit_url,
+        "readUrl": data["readCallbackUrl"],
     }
 
 
@@ -549,7 +552,7 @@ def validate_generation_parameters(
         aitable_webhook_url = require_submit_url()
         validate_aitable_webhook_url(aitable_webhook_url)
         data["callbackUrl"] = aitable_webhook_url
-        data["viewCallbackUrl"] = optional_view_url()
+        data["readCallbackUrl"] = require_read_url()
         validate_html_form_data(data)
         return data, aitable_webhook_url
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import re
 import subprocess
@@ -14,9 +15,12 @@ from urllib.parse import quote
 SKILL_DIR = Path(__file__).resolve().parents[1]
 TOOL = SKILL_DIR / "scripts" / "weekly_report_tool.py"
 SUBMIT_URL_ENV = "WEEKLY_FEEDBACK_SUBMIT_URL"
-VIEW_URL_ENV = "WEEKLY_FEEDBACK_VIEW_URL"
+READ_URL_ENV = "WEEKLY_FEEDBACK_READ_URL"
 AITABLE_WEBHOOK_URL = (
     "https://connector.dingtalk.com/webhook/flow/103b082bde2f2107d5c80007"
+)
+READ_WEBHOOK_URL = (
+    "https://connector.dingtalk.com/webhook/flow/103b082bde2f2107d5c80008"
 )
 
 
@@ -43,7 +47,7 @@ def html_data() -> dict:
         "week": "2026-W15",
         "collector": "辰驷",
         "reportTime": "2026-08-26 10:00:00",
-        "submissionId": "wf-1787690400000-a1b2",
+        "outTrackId": "wf-1787690400000-a1b2",
         "callbackHeaders": {},
         "formDisabled": False,
     }
@@ -63,6 +67,33 @@ def markdown_data() -> dict:
         "feedbackLinkText": "查看完整周报并反馈您的意见",
         "recipientName": "辰驷",
     }
+
+
+def webhook_base(out_track_id: str = "track-001") -> dict:
+    data = html_data()
+    return {
+        "schemaVersion": 2,
+        "outTrackId": out_track_id,
+        "reportUrl": data["reportUrl"],
+        "summaryMarkdown": data["summaryMarkdown"],
+        "riskMarkdown": [],
+        "nextWeekMarkdown": [],
+        "projects": data["projects"],
+        "dissatisfactionOptions": data["dissatisfactionOptions"],
+        "reportPeriod": data["reportPeriod"],
+        "customer": data["customer"],
+        "week": data["week"],
+        "collector": data["collector"],
+        "reportTime": data["reportTime"],
+    }
+
+
+def load_transform(filename: str, module_name: str):
+    spec = importlib.util.spec_from_file_location(module_name, SKILL_DIR / filename)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def make_fake_dws(directory: Path) -> Path:
@@ -91,7 +122,7 @@ raise SystemExit(int(os.environ.get("FAKE_DWS_EXIT", "0")))
 def command_environment(
     *,
     submit_url: str | None = None,
-    view_url: str | None = None,
+    read_url: str | None = None,
     fake_dws_dir: Path | None = None,
     fake_response: dict | str | None = None,
     fake_exit: int = 0,
@@ -101,7 +132,7 @@ def command_environment(
     environment = os.environ.copy()
     for name in (
         SUBMIT_URL_ENV,
-        VIEW_URL_ENV,
+        READ_URL_ENV,
         "FAKE_DWS_RECORD",
         "FAKE_DWS_STDOUT",
         "FAKE_DWS_STDERR",
@@ -110,8 +141,8 @@ def command_environment(
         environment.pop(name, None)
     if submit_url is not None:
         environment[SUBMIT_URL_ENV] = submit_url
-    if view_url is not None:
-        environment[VIEW_URL_ENV] = view_url
+    if read_url is not None:
+        environment[READ_URL_ENV] = read_url
     if fake_dws_dir is not None:
         environment["PATH"] = f"{fake_dws_dir}{os.pathsep}{environment['PATH']}"
     if record_path is not None:
@@ -175,7 +206,7 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertEqual(
             schema_files,
             [
-                "weekly-feedback-view.schema.json",
+                "weekly-feedback-read.schema.json",
                 "weekly-feedback-webhook.schema.json",
                 "weekly-report-briefing.schema.json",
             ],
@@ -217,7 +248,7 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertEqual(schema["properties"]["schemaVersion"]["const"], 2)
         self.assertTrue(
             {
-                "submissionId",
+                "outTrackId",
                 "reportUrl",
                 "summaryMarkdown",
                 "riskMarkdown",
@@ -240,17 +271,92 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertNotIn("feedbackUserId", schema["properties"])
         self.assertNotIn("feedbackUserName", schema["properties"])
+        self.assertNotIn("submissionId", schema["properties"])
         self.assertEqual(
             sorted(schema["properties"]["projects"]["items"]["required"]),
             ["id", "name"],
         )
         self.assertTrue(schema["allOf"], "不满意时原因至少一项的条件约束应保留")
 
+    def test_read_schema_combines_base_data_with_read_status(self) -> None:
+        schema_path = SKILL_DIR / "assets" / "weekly-feedback-read.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            schema["properties"]["keyword"]["const"],
+            "weekly_report_mark_read",
+        )
+        self.assertTrue(
+            {
+                "outTrackId",
+                "reportUrl",
+                "summaryMarkdown",
+                "riskMarkdown",
+                "nextWeekMarkdown",
+                "projects",
+                "dissatisfactionOptions",
+                "reportPeriod",
+                "customer",
+                "week",
+                "collector",
+                "reportTime",
+                "isRead",
+            }.issubset(set(schema["required"]))
+        )
+        self.assertNotIn("submissionId", schema["properties"])
+        self.assertNotIn("respondentId", schema["properties"])
+        self.assertFalse(schema["additionalProperties"])
+
     def test_agent_prompt_only_calls_gen_card(self) -> None:
         prompt = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
         self.assertIn("gen-card", prompt)
         self.assertNotIn("按 DWS 流程", prompt)
         self.assertNotIn("dws api", prompt)
+
+
+class WebhookTransformTests(unittest.TestCase):
+    def test_feedback_transform_writes_base_and_feedback_fields_only(self) -> None:
+        transform = load_transform(
+            "feedback_webhook_transform.py", "feedback_webhook_transform_test"
+        )
+        payload = {
+            "action": "submit_weekly_feedback",
+            **webhook_base(),
+            "satisfaction": "不满意",
+            "dissatisfactionReasons": ["沟通响应不及时"],
+            "feedback": "希望及时同步进度",
+            "respondentId": "user-001",
+            "respondentNickname": "测试用户",
+            "feedbackTime": "2026-09-03T22:48:00+08:00",
+        }
+
+        result = transform.main({"payload": json.dumps(payload, ensure_ascii=False)})
+        row = result["rows"][0]
+
+        self.assertEqual(row["编号"], "track-001")
+        self.assertEqual(row["是否满意"], "不满意")
+        self.assertEqual(row["不满意原因"], "沟通响应不及时")
+        self.assertEqual(row["反馈人ID"], "user-001")
+        self.assertNotIn("是否已读", row)
+
+    def test_read_transform_writes_base_and_read_fields_only(self) -> None:
+        transform = load_transform(
+            "feedback_read_transform.py", "feedback_read_transform_test"
+        )
+        payload = {
+            "keyword": "weekly_report_mark_read",
+            **webhook_base(),
+            "isRead": True,
+        }
+
+        result = transform.main({"payload": payload})
+        row = result["row"]
+
+        self.assertEqual(row["编号"], "track-001")
+        self.assertEqual(row["客户"], "维信诺")
+        self.assertEqual(row["是否已读"], "是")
+        self.assertNotIn("是否满意", row)
+        self.assertNotIn("具体反馈", row)
 
 
 class HtmlGenerationTests(unittest.TestCase):
@@ -261,7 +367,10 @@ class HtmlGenerationTests(unittest.TestCase):
                 "html",
                 html_data(),
                 output=output,
-                environment=command_environment(submit_url=AITABLE_WEBHOOK_URL),
+                environment=command_environment(
+                    submit_url=AITABLE_WEBHOOK_URL,
+                    read_url=READ_WEBHOOK_URL,
+                ),
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -288,9 +397,16 @@ class HtmlGenerationTests(unittest.TestCase):
         )
         self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
         self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)
-        self.assertEqual(generated_data["viewCallbackUrl"], "")
-        self.assertIn("sendViewBeacon", generated_runtime)
-        self.assertIn("view_weekly_feedback", generated_runtime)
+        self.assertEqual(generated_data["readCallbackUrl"], READ_WEBHOOK_URL)
+        self.assertEqual(command_result["readUrl"], READ_WEBHOOK_URL)
+        self.assertIn("reportReadOnLoad", generated_runtime)
+        self.assertIn("weekly_report_mark_read", generated_runtime)
+        self.assertIn("isRead: true", generated_runtime)
+        self.assertIn("outTrackId: params.outTrackId", generated_runtime)
+        self.assertIn(
+            'window.addEventListener("load", reportReadOnLoad, { once: true });',
+            generated_runtime,
+        )
         self.assertEqual(
             generated_files,
             ["feedback.html", "weekly-feedback-app.js"],
@@ -329,9 +445,12 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertIn('id="satisfactionOptions"', generated_html)
         self.assertIn('id="dissatisfactionReasons"', generated_html)
         self.assertIn('id="feedbackInput"', generated_html)
-        self.assertIn(json.dumps([AITABLE_WEBHOOK_URL]), generated_runtime)
+        self.assertIn(
+            json.dumps([AITABLE_WEBHOOK_URL, READ_WEBHOOK_URL]),
+            generated_runtime,
+        )
 
-    def test_html_injects_view_url_when_configured(self) -> None:
+    def test_html_injects_read_url_when_configured(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "generated" / "feedback.html"
             result = run_gen_card(
@@ -340,14 +459,27 @@ class HtmlGenerationTests(unittest.TestCase):
                 output=output,
                 environment=command_environment(
                     submit_url=AITABLE_WEBHOOK_URL,
-                    view_url=AITABLE_WEBHOOK_URL,
+                    read_url=READ_WEBHOOK_URL,
                 ),
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             generated_data = extract_html_data(output)
 
-        self.assertEqual(generated_data["viewCallbackUrl"], AITABLE_WEBHOOK_URL)
+        self.assertEqual(generated_data["readCallbackUrl"], READ_WEBHOOK_URL)
+
+    def test_html_requires_read_webhook_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "feedback.html"
+            result = run_gen_card(
+                "html",
+                html_data(),
+                output=output,
+                environment=command_environment(submit_url=AITABLE_WEBHOOK_URL),
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(READ_URL_ENV, result.stderr)
 
     def test_html_requires_output_and_submit_url(self) -> None:
         result = run_gen_card(
@@ -500,6 +632,7 @@ class SummaryAndIconUrlTests(unittest.TestCase):
         data = html_data()
         data.pop("iconUrl", None)
         data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
         errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
         self.assertEqual(errors, [])
 
@@ -526,6 +659,7 @@ class BriefingSchemaSourceTests(unittest.TestCase):
     def test_briefing_progress_item_cap_enforced(self) -> None:
         data = html_data()
         data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
         data["summaryMarkdown"] = [f"进展{i}" for i in range(6)]  # 超过 maxItems 5
         errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
         self.assertTrue(errors, "超过条数上限应校验失败")

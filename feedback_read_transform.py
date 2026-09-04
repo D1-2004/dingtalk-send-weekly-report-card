@@ -1,7 +1,7 @@
 import json
 
 
-EXPECTED_ACTION = "submit_weekly_feedback"
+EXPECTED_KEYWORD = "weekly_report_mark_read"
 EXPECTED_SCHEMA_VERSION = 2
 
 
@@ -24,11 +24,6 @@ def _required_text(payload, name):
     if not isinstance(value, str) or not value.strip():
         raise ValueError(name + " must be a non-empty string")
     return value.strip()
-
-
-def _optional_text(payload, name):
-    value = payload.get(name)
-    return value.strip() if isinstance(value, str) else ""
 
 
 def _string_list(payload, name):
@@ -55,22 +50,21 @@ def _projects(payload):
     return projects
 
 
+def _read_value(payload):
+    value = payload.get("isRead")
+    if value is True:
+        return "是"
+    if value is False:
+        return "否"
+    raise ValueError("isRead must be a boolean")
+
+
 def main(params: dict):
     payload = _decode_payload(params.get("payload", params))
     if payload.get("schemaVersion") != EXPECTED_SCHEMA_VERSION:
         raise ValueError("schemaVersion must be 2")
-    if payload.get("action") != EXPECTED_ACTION:
-        raise ValueError("unsupported action")
-
-    satisfaction = _required_text(payload, "satisfaction")
-    if satisfaction not in ("满意", "不满意"):
-        raise ValueError("satisfaction must be 满意 or 不满意")
-
-    reasons = _string_list(payload, "dissatisfactionReasons")
-    if satisfaction == "满意":
-        reasons = []
-    elif not reasons:
-        raise ValueError("dissatisfactionReasons is required when unsatisfied")
+    if payload.get("keyword") != EXPECTED_KEYWORD:
+        raise ValueError("unsupported keyword")
 
     row = {
         "编号": _required_text(payload, "outTrackId"),
@@ -88,11 +82,6 @@ def main(params: dict):
         "不满意原因选项": json.dumps(
             _string_list(payload, "dissatisfactionOptions"), ensure_ascii=False
         ),
-        "是否满意": satisfaction,
-        "不满意原因": "；".join(reasons),
-        "具体反馈": _optional_text(payload, "feedback"),
-        "反馈人ID": _required_text(payload, "respondentId"),
-        "反馈人昵称": _required_text(payload, "respondentNickname"),
-        "反馈时间": _required_text(payload, "feedbackTime"),
+        "是否已读": _read_value(payload),
     }
-    return {"rows": [row], "rowCount": 1}
+    return {"row": row}

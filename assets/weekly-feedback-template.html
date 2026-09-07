@@ -763,9 +763,15 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     }
   }
 
-  function reportReadOnLoad() {
+  async function reportReadOnLoad() {
     const url = params.readCallbackUrl;
     if (!url) return;
+    let reader;
+    try {
+      reader = await getFeedbackUser();
+    } catch (identityError) {
+      reader = { userId: "anonymous", name: "匿名客户", avatar: "", corpId: "" };
+    }
     const payload = {
       keyword: "weekly_report_mark_read",
       schemaVersion: 2,
@@ -773,6 +779,8 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       row: {
         ...buildBaseRow(),
         "是否已读": "是",
+        "读取人ID": reader.userId,
+        "读取人昵称": reader.name || reader.userId,
       },
     };
     fetch(url, {

@@ -15,7 +15,7 @@
         "required": [
           "编号", "客户", "项目", "周次", "收集人", "周报链接", "周报周期",
           "周报时间", "数据版本", "本周进展", "风险关注", "下周重点",
-          "不满意原因选项", "是否已读"
+          "不满意原因选项", "是否已读", "读取人ID", "读取人昵称"
         ],
         "properties": {
           "编号": { "type": "string", "minLength": 1 },
@@ -31,7 +31,9 @@
           "风险关注": { "type": "string" },
           "下周重点": { "type": "string" },
           "不满意原因选项": { "type": "string", "contentMediaType": "application/json" },
-          "是否已读": { "const": "是" }
+          "是否已读": { "const": "是" },
+          "读取人ID": { "type": "string", "minLength": 1 },
+          "读取人昵称": { "type": "string", "minLength": 1 }
         }
     }
   }

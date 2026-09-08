@@ -22,6 +22,15 @@ scripts/weekly_report_tool.py gen-card
 
 网页只收集一份整体反馈（整页一组满意度，不按项目拆分）。客户与项目只读展示，用户填写一次满意度、不满意原因和更多反馈。提交给 Webhook 的数据协议见 `assets/weekly-feedback-webhook.schema.json`。
 
+## 环境检查
+
+使用技能前确认以下环境依赖已就绪：
+
+- Python 3 与 `jsonschema`；缺少依赖时使用 `python3 -m pip install -r scripts/requirements.txt` 安装。
+- `dws` 已登录，具备 `aitable`（读取项目底表）和 `chat`（发送消息）权限。
+- Multica Site 的 `prepare_static_site_deploy` / `get_static_site_deploy` 能力可用。
+- HTML 所需的 `WEEKLY_FEEDBACK_SUBMIT_URL`、`WEEKLY_FEEDBACK_READ_URL` 已注入；格式由生成命令校验，见「命令参数」。项目底表来源使用 `LTC_SOURCE`，缺失时按「项目底表与关联」降级。
+
 ## 工作流
 
 1. 读取周报，关联项目底表（见「项目底表与关联」），根据下方参数规格构造 HTML 数据。
@@ -31,7 +40,7 @@ scripts/weekly_report_tool.py gen-card
 5. 将 `site_url` 写入 Markdown 数据的 `feedbackUrl`。
 6. 调用 `gen-card`，省略 `--type` 即使用默认 `markdown`，`recipientName` 默认填**发起人**，把回访消息发给发起人本人预览确认。
 7. 发起人确认内容、并明确指定外发对象（某客户/某群）后，才再次调用 `gen-card` 以指定接收人外发；发起人只说"发给客户"但尚未确认内容的，先把消息全文与反馈链接发给发起人确认。
-8. 只有 HTML 发布成功且 Markdown 命令返回 `success: true`，才回复用户“已发送，请查收”。
+8. HTML 发布成功且 Markdown 命令返回 `success: true` 后，直接输出结果中的 `markdown` 全文，遵循下方「卡片撰写与输出方案」。
 
 HTML 发布失败时，不发送缺少反馈入口或使用本地文件地址的消息。
 
@@ -92,6 +101,12 @@ HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL` 和 `WEEKLY_FEEDBA
 
 使用当前 Agent 已有的文档读取能力获取周报正文；读取失败时请求授权或让用户粘贴正文，不根据标题猜测正文。
 
+### 卡片撰写与输出方案
+
+Agent 输出的周报卡片必须可直接转发：直接输出 `gen-card` 返回的 `markdown` 正文，从周报标题开始，到反馈入口结束。预览确认与最终交付都不加开场白、结尾说明或代码块，不写“以下是可以转发的卡片”“下面是做完的卡片”“已发送，请查收”等任务状态文案。HTML 单独交付时，直接输出以周报标题为文案的钉钉工作台链接。
+
+所有面向用户的网页入口使用 `dingtalk://dingtalkclient/page/link?web_wnd=workbench&url=<report-card-url>`，其中 `url` 的值是完整目标网页地址经过一次 URL 编码的结果（包含查询参数和锚点），不输出裸 HTTP(S) 链接。Markdown 卡片使用命令返回的正文；单独引用反馈页时使用返回的 `feedbackDeepLink`，不使用原始 `feedbackUrl`。HTML 数据块中的 `reportUrl` 也必须为这一深链格式，避免页面内的完整周报入口仍使用裸网页地址；Webhook 地址和静态资源地址保持原有格式。
+
 三段文案（进展/风险/下周）一律**面向客户**书写：站在"给客户展示本周服务"的视角，不出现内部口吻（如"客户已确认""等客户回复"这类第三人称表述）。
 
 精炼与重点规则：
@@ -107,6 +122,7 @@ HTML 输入样例见 `assets/weekly-feedback-html-data.example.json`。必填字
 
 - `schemaVersion`：固定为 `2`。
 - `title`、`reportUrl`、`reportPeriod`、`customer`、`week`、`collector`、`reportTime`、`outTrackId`：非空字符串；`outTrackId` 必须使用卡片实例的同名值，并作为落表字段「编号」的值。
+- `reportUrl`：钉钉工作台深链，目标为完整周报的原始网页地址；命令兼容原始 HTTP(S) 输入并统一转换，写入 HTML 数据块的是深链，已有深链不会重复嵌套或编码。
 - `summaryMarkdown`：本周进展字符串数组。
 - `projects`：只读项目数组，每项包含唯一 `id` 和 `name`。
 - `dissatisfactionOptions`：不满意原因快捷选项数组，**固定为四项**：`产品能力不满足期望`、`交付进度不满意`、`沟通响应不及时`、`其他`。
@@ -154,14 +170,3 @@ python3 scripts/weekly_report_tool.py gen-card \
 ```
 
 任何校验、托管或投递失败都直接报告安全错误摘要，不绕过校验，不声称已生成、已发布或已发送。
-
-## 历史记录
-
-- 2026-08-30：HTML 产物改为入口文件加同源 JavaScript 构建资源，原因是 Multica Site 的严格 CSP 会阻止内联可执行脚本，导致页面只能显示静态布局。
-- 2026-08-31：样式与信息结构升级——头部去掉依赖外链的客户 logo 改用内联图标、PC/移动端字号与间距收紧、摘要拆「本周进展 + 风险 · 关注」两块（新增可选 `riskMarkdown`）、满意度改为两个大按钮、不满意下钻固定四项；`iconUrl` 转为可选。明确以 LTC 项目底表关联项目并按合同金额降序排序（金额仅内部排序用，不外发）。
-- 2026-09-01：回写 Webhook 升级 v2 落表 Schema（`respondentId`/`respondentNickname`/`feedbackTime`、`projects` 对象化、不满意原因条件必填），前端 payload 与回写 Python 同步。
-- 2026-09-03：新增「发送与确认规则」——回访消息默认发发起人本人预览；外发客户/群须发起人明确指定对象且确认内容全文，"直接发"也先经发起人确认；不再主动询问"发给谁"。
-- 2026-09-03：页面加载上报升级为同表已读协议——使用 `outTrackId` 作为「编号」，已读与反馈分别携带完整基础信息并按编号 upsert 到同一行，两个流程互不覆盖对方字段。
-- 2026-09-03：对客文案与样式调整——标题统一「{客户或项目}周报」；三段摘要按客户视角书写（需客户配合写"需要贵司…"）；不满意选项「所得与期望效果不符合」改为「产品能力不满足期望」；勾选「其他」展开内联输入框并并入 `feedback`；底部输入框改名「更多反馈」；Markdown 消息不再外显完整周报链接，反馈入口文案改为「查看完整周报并反馈您的意见」。
-- 2026-09-03：三段摘要收 maxItems=3、单条 ≤ 120 字，文字精炼引导点链接看完整周报；IM 消息只外显本周进展（最多 3 条）+ 末尾「更多信息……」，风险 / 下周重点仍在反馈页呈现但不挤 IM 屏；HTML `<title>` 静态注入为「{客户或项目}周报」，钉钉聊天粘贴链接的卡片能读到具体客户名而非笼统标题。
-- 2026-09-03：摘要精炼规则细化——每条只讲一件事、直接给结论，砍过程性冗余；需要客户确认/提供/配合的条目整条加粗（"**需要贵司确认/提供/配合**："开头），纯我方推进不加粗。

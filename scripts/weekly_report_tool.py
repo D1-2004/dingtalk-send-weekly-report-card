@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from string import Template
 from typing import Any
-from urllib.parse import quote, urlparse, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlparse, urlsplit, urlunsplit
 
 try:
     from jsonschema import Draft202012Validator
@@ -48,6 +48,7 @@ READ_URL_ENV = "WEEKLY_FEEDBACK_READ_URL"
 AITABLE_WEBHOOK_HOST = "connector.dingtalk.com"
 AITABLE_WEBHOOK_PATH_PREFIX = "/webhook/flow/"
 FLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+WORKBENCH_LINK_PREFIX = "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
 MULTICA_SITE_ROOT_PATTERN = re.compile(r"^/sites/[^/]+$")
 SCRIPT_BLOCK_PATTERN = re.compile(
     r"(?P<indent>^[ \t]*)<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>",
@@ -99,7 +100,11 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         "schemaVersion": {"const": 2},
         "iconUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
         "title": {"type": "string", "minLength": 1, "maxLength": 100},
-        "reportUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
+        "reportUrl": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": r"^(https?://|dingtalk://dingtalkclient/page/link\?web_wnd=workbench&url=)",
+        },
         "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
         "summaryMarkdown": BRIEFING_PROPERTIES["summaryMarkdown"],
         "riskMarkdown": BRIEFING_PROPERTIES["riskMarkdown"],
@@ -471,7 +476,9 @@ def gen_html_card(
         raise ToolError(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
-    rendered = replace_data_block(template, data)
+    rendered = replace_data_block(
+        template, {**data, "reportUrl": build_dingtalk_workbench_link(data["reportUrl"])}
+    )
     rendered = replace_html_title(rendered, data["title"])
     configured = configure_html_runtime(rendered, submit_url, data["readCallbackUrl"])
     generated_html, generated_runtime = externalize_html_runtime(configured)
@@ -500,10 +507,15 @@ def gen_html_card(
 
 
 def build_dingtalk_workbench_link(url: str) -> str:
-    return (
-        "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
-        + quote(normalize_hosted_site_url(url), safe="")
-    )
+    if url.startswith(WORKBENCH_LINK_PREFIX):
+        url = unquote(url[len(WORKBENCH_LINK_PREFIX):])
+    try:
+        parsed = urlsplit(url)
+    except ValueError as error:
+        raise ToolError("webpage link must target an absolute HTTP or HTTPS URL") from error
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ToolError("webpage link must target an absolute HTTP or HTTPS URL")
+    return WORKBENCH_LINK_PREFIX + quote(normalize_hosted_site_url(url), safe="")
 
 
 def normalize_hosted_site_url(url: str) -> str:

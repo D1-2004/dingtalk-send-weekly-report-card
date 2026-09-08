@@ -210,7 +210,8 @@ class SimplifiedSkillTests(unittest.TestCase):
         self.assertNotIn("weekly-feedback-runtime.js", skill)
         self.assertIn("index.html", skill)
         self.assertIn("完整构建产物", skill)
-        self.assertIn("## 历史记录", skill)
+        self.assertNotIn("## 历史记录", skill)
+        self.assertFalse((SKILL_DIR / "DEPLOY.md").exists())
 
     def test_only_asset_schema_describes_webhook_payload(self) -> None:
         schema_path = SKILL_DIR / "assets" / "weekly-feedback-webhook.schema.json"
@@ -260,6 +261,29 @@ class SimplifiedSkillTests(unittest.TestCase):
 
 
 class HtmlGenerationTests(unittest.TestCase):
+    def test_html_report_link_preserves_query_and_accepts_existing_deep_link(self) -> None:
+        target = "https://alidocs.dingtalk.com/i/nodes/example?name=周报&view=a%20b#进展"
+        deep_link = (
+            "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
+            + quote(target, safe="")
+        )
+        for report_url in (target, deep_link):
+            with self.subTest(report_url=report_url), tempfile.TemporaryDirectory() as temp_dir:
+                data = html_data()
+                data["reportUrl"] = report_url
+                output = Path(temp_dir) / "index.html"
+                result = run_gen_card(
+                    "html",
+                    data,
+                    output=output,
+                    environment=command_environment(
+                        submit_url=AITABLE_WEBHOOK_URL,
+                        read_url=READ_WEBHOOK_URL,
+                    ),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(extract_html_data(output)["reportUrl"], deep_link)
+
     def test_html_injects_submit_url_and_returns_output(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "generated" / "feedback.html"
@@ -294,6 +318,11 @@ class HtmlGenerationTests(unittest.TestCase):
         self.assertEqual(
             command_result["siteFiles"],
             ["feedback.html", "weekly-feedback-app.js"],
+        )
+        self.assertEqual(
+            generated_data["reportUrl"],
+            "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
+            + quote(html_data()["reportUrl"], safe=""),
         )
         self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
         self.assertEqual(command_result["submitUrl"], AITABLE_WEBHOOK_URL)

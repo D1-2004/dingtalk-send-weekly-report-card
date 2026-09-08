@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "title": "维信诺周报",
-  "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+  "reportUrl": "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url=https%3A%2F%2Falidocs.dingtalk.com%2Fi%2Fnodes%2Fexample",
   "reportLinkText": "查看完整周报",
   "summaryMarkdown": [
     "智能助理意图识别模型迭代上线，准确率 **提升 3%**",

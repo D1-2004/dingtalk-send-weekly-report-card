@@ -264,7 +264,7 @@
       {
         "schemaVersion": 2,
         "title": "维信诺周报",
-        "reportUrl": "https://alidocs.dingtalk.com/i/nodes/example",
+        "reportUrl": "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url=https%3A%2F%2Falidocs.dingtalk.com%2Fi%2Fnodes%2Fexample",
         "reportLinkText": "查看完整周报",
         "summaryMarkdown": [
           "智能助理意图识别模型迭代上线，准确率 **提升 3%**",
@@ -495,10 +495,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     card.replaceChildren(content);
   }
 
-  function safeHttpUrl(value) {
+  function safeWorkbenchUrl(value) {
     try {
-      const url = new URL(value, window.location.href);
-      return ["http:", "https:"].includes(url.protocol) ? url.href : "#";
+      const prefix = "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url=";
+      if (!value.startsWith(prefix)) return "#";
+      const target = new URL(decodeURIComponent(value.slice(prefix.length)));
+      return ["http:", "https:"].includes(target.protocol) ? value : "#";
     } catch {
       return "#";
     }
@@ -795,7 +797,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     elements.title.textContent = params.title;
     document.title = params.title;
     elements.period.textContent = params.reportPeriod;
-    elements.reportLink.href = safeHttpUrl(params.reportUrl);
+    elements.reportLink.href = safeWorkbenchUrl(params.reportUrl);
     elements.reportLinkText.textContent = params.reportLinkText;
     elements.feedbackInput.value = state.feedback;
     elements.feedbackInput.disabled = state.submitted;

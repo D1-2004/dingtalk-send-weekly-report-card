@@ -91,6 +91,13 @@ def node_markdown_data() -> dict:
 
 
 def make_fake_dws(directory: Path) -> Path:
+    """写入一个无扩展名的 shebang 脚本充当假 dws。
+
+    注意：Windows 的 CreateProcess 只给无扩展名命令补全 .exe、不解析
+    shebang，假程序在本机永远不会被执行；断言"真实发送成功路径"的用例
+    必须用 skipIf(win32) 跳过（见 MarkdownDeliveryTests），否则命令会命中
+    PATH 上的真实 dws，把消息真实发给接收人。
+    """
     executable = directory / "dws"
     executable.write_text(
         """#!/usr/bin/env python3
@@ -463,6 +470,12 @@ class HtmlGenerationTests(unittest.TestCase):
 
 
 class MarkdownDeliveryTests(unittest.TestCase):
+    @unittest.skipIf(
+        sys.platform == "win32",
+        "Windows 的 CreateProcess 无法执行无扩展名的 fake dws（只补全 .exe），"
+        "用例会命中 PATH 上的真实 dws 并给接收人真实发送消息，"
+        "因此本机跳过；该用例在 Linux/macOS 上正常运行。",
+    )
     def test_markdown_is_default_and_sends_rendered_template(self) -> None:
         data = markdown_data()
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -676,7 +676,12 @@ class NodeCardTests(unittest.TestCase):
         self.assertNotIn("**本周进展**", rendered)
         self.assertNotIn("周期：", rendered)
         self.assertIn(data["summaryMarkdown"][0], rendered)
-        self.assertIn("确认本次进展并反馈您的意见", rendered)
+        self.assertIn("查看当前项目进展并反馈您的意见", rendered)
+
+    def test_markdown_node_card_never_mentions_weekly_report(self) -> None:
+        data = node_markdown_data()
+        rendered = self.w.render_markdown(data)
+        self.assertNotIn("周报", rendered, "节点卡客户文案不得出现「周报」字样")
 
     def test_markdown_node_card_no_more_info_line(self) -> None:
         data = node_markdown_data()
@@ -737,6 +742,8 @@ class NodeCardTests(unittest.TestCase):
         self.assertIn('id="progressLabelText"', generated_html)
         self.assertIn("reportLink.hidden = true", generated_runtime)
         self.assertIn("当前项目节点：", generated_runtime)
+        # 节点卡默认链接文案不得回落为「查看完整周报」字样
+        self.assertNotIn('reportLinkText: "查看完整周报"', generated_runtime)
         # Webhook 协议字段保持存在：节点卡无链接时落空字符串
         self.assertIn('"周报链接": params.reportUrl || ""', generated_runtime)
         self.assertIn('"周报周期": params.reportPeriod || ""', generated_runtime)
@@ -766,6 +773,34 @@ class NodeCardTests(unittest.TestCase):
             + quote(data["reportUrl"], safe=""),
         )
         self.assertEqual(generated_data["reportLinkText"], "查看项目进展详情")
+
+    def test_html_node_card_link_text_defaults_by_card_kind(self) -> None:
+        data = node_html_data()
+        data["reportUrl"] = "https://alidocs.dingtalk.com/i/nodes/node-doc"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "node-feedback.html"
+            result = run_gen_card(
+                "html",
+                data,
+                output=output,
+                environment=command_environment(
+                    submit_url=AITABLE_WEBHOOK_URL,
+                    read_url=READ_WEBHOOK_URL,
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated_data = extract_html_data(output)
+            generated_runtime = (
+                output.parent / "weekly-feedback-app.js"
+            ).read_text(encoding="utf-8")
+
+        self.assertNotIn("reportLinkText", generated_data)
+        # 未传 reportLinkText 时由 JS 按卡片类型兜底：节点卡显示节点文案
+        self.assertIn(
+            '(isNodeCard ? "查看完整项目进展" : "查看完整周报")',
+            generated_runtime,
+        )
 
 
 class SummaryAndIconUrlTests(unittest.TestCase):

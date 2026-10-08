@@ -603,10 +603,11 @@ def render_markdown(data: dict[str, Any]) -> str:
 
     if card_kind == "node":
         # 节点卡：副标题与表头切到节点字段；风险/下周重点不出现。
+        # 客户侧是"当前项目阶段进展"而非周报，入口文案不得出现"周报"字样。
         report_period = f"当前项目节点：{data['node']}"
         summary = "**本次进展**\n" + "\n".join(progress_lines)
         feedback_link_text = data.get(
-            "feedbackLinkText", "确认本次进展并反馈您的意见"
+            "feedbackLinkText", "查看当前项目进展并反馈您的意见"
         )
     else:
         # 周报卡：IM 消息只保留本周进展要点（最多 3 条）。风险 · 关注 / 下周重点

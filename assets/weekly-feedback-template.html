@@ -493,7 +493,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     }
 
     return {
-      reportLinkText: "查看完整周报",
+      reportLinkText: "",
       riskMarkdown: [],
       nextWeekMarkdown: [],
       satisfaction: "",
@@ -831,8 +831,12 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     }
     const reportUrl = (params.reportUrl || "").trim();
     if (reportUrl) {
+      // 节点卡是"项目阶段进展"而非周报，默认链接文案不得出现"周报"字样。
+      const linkText =
+        (params.reportLinkText || "").trim() ||
+        (isNodeCard ? "查看完整项目进展" : "查看完整周报");
       elements.reportLink.href = safeWorkbenchUrl(reportUrl);
-      elements.reportLinkText.textContent = params.reportLinkText;
+      elements.reportLinkText.textContent = linkText;
     } else {
       // 未提供项目文档链接时整项隐藏，不留占位文字。
       elements.reportLink.hidden = true;

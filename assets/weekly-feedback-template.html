@@ -70,6 +70,7 @@
       }
       .report-link__icon { display: inline-flex; }
       .report-link__icon svg { width: 16px; height: 16px; }
+      .report-link[hidden] { display: none; }
 
       .summary-panel {
         margin-top: 16px;
@@ -195,7 +196,7 @@
 
         <div class="summary-panel">
         <section class="summary-block" id="progressBlock">
-          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>本周进展</div>
+          <div class="summary-label" id="progressLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span id="progressLabelText">本周进展</span></div>
           <ul class="summary-list" id="progressList"></ul>
         </section>
         <section class="summary-block risk" id="riskBlock">
@@ -263,6 +264,7 @@
     <script type="application/json" id="weeklyFeedbackFormData">
       {
         "schemaVersion": 2,
+        "cardKind": "weekly",
         "title": "维信诺周报",
         "reportUrl": "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url=https%3A%2F%2Falidocs.dingtalk.com%2Fi%2Fnodes%2Fexample",
         "reportLinkText": "查看完整周报",
@@ -341,6 +343,7 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
     reportLink: document.querySelector("#reportLink"),
     reportLinkText: document.querySelector("#reportLinkText"),
     progressBlock: document.querySelector("#progressBlock"),
+    progressLabelText: document.querySelector("#progressLabelText"),
     progressList: document.querySelector("#progressList"),
     riskBlock: document.querySelector("#riskBlock"),
     riskList: document.querySelector("#riskList"),
@@ -379,8 +382,6 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
 
     [
       "title",
-      "reportUrl",
-      "reportPeriod",
       "customer",
       "week",
       "collector",
@@ -391,6 +392,31 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
         throw new Error(`${field} 必须是非空字符串`);
       }
     });
+
+    // cardKind 缺省视为 weekly。node（节点卡）要求 node 字段，
+    // reportUrl / reportPeriod 可省略；weekly 仍要求二者为非空字符串。
+    if (
+      source.cardKind !== undefined &&
+      !["weekly", "node"].includes(source.cardKind)
+    ) {
+      throw new Error("cardKind 只能是 weekly 或 node");
+    }
+    if (source.cardKind === "node") {
+      if (typeof source.node !== "string" || !source.node.trim()) {
+        throw new Error("node 必须是非空字符串");
+      }
+      ["reportUrl", "reportPeriod"].forEach((field) => {
+        if (source[field] !== undefined && typeof source[field] !== "string") {
+          throw new Error(`${field} 必须是字符串`);
+        }
+      });
+    } else {
+      ["reportUrl", "reportPeriod"].forEach((field) => {
+        if (typeof source[field] !== "string" || !source[field].trim()) {
+          throw new Error(`${field} 必须是非空字符串`);
+        }
+      });
+    }
 
     if (!Array.isArray(source.summaryMarkdown)) {
       throw new Error("summaryMarkdown 必须是字符串数组");
@@ -665,8 +691,8 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
       ),
       "周次": params.week,
       "收集人": params.collector,
-      "周报链接": params.reportUrl,
-      "周报周期": params.reportPeriod,
+      "周报链接": params.reportUrl || "",
+      "周报周期": params.reportPeriod || "",
       "周报时间": params.reportTime,
       "数据版本": 2,
       "本周进展": (params.summaryMarkdown || []).join("\n"),
@@ -794,11 +820,24 @@ window.__MULTICA_FETCH_PROXY_ALLOWLIST__ = __WEEKLY_FEEDBACK_PROXY_ALLOWLIST__;
   }
 
   function initialize() {
+    const isNodeCard = params.cardKind === "node";
     elements.title.textContent = params.title;
     document.title = params.title;
-    elements.period.textContent = params.reportPeriod;
-    elements.reportLink.href = safeWorkbenchUrl(params.reportUrl);
-    elements.reportLinkText.textContent = params.reportLinkText;
+    if (isNodeCard) {
+      elements.period.textContent = `当前项目节点：${params.node}`;
+      elements.progressLabelText.textContent = "本次进展";
+    } else {
+      elements.period.textContent = params.reportPeriod;
+    }
+    const reportUrl = (params.reportUrl || "").trim();
+    if (reportUrl) {
+      elements.reportLink.href = safeWorkbenchUrl(reportUrl);
+      elements.reportLinkText.textContent = params.reportLinkText;
+    } else {
+      // 未提供项目文档链接时整项隐藏，不留占位文字。
+      elements.reportLink.hidden = true;
+      elements.reportLink.removeAttribute("href");
+    }
     elements.feedbackInput.value = state.feedback;
     elements.feedbackInput.disabled = state.submitted;
     elements.submitButton.textContent = "提交反馈";

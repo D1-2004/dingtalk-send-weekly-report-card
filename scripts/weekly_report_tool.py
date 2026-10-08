@@ -69,7 +69,7 @@ EXECUTABLE_SCRIPT_TYPES = {
 }
 MARKDOWN_TEMPLATE = Template(
     """### $title
-> 周期：$report_period
+> $report_period
 
 $summary
 
@@ -83,11 +83,9 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
     "required": [
         "schemaVersion",
         "title",
-        "reportUrl",
         "summaryMarkdown",
         "projects",
         "dissatisfactionOptions",
-        "reportPeriod",
         "customer",
         "week",
         "collector",
@@ -99,12 +97,10 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
     "properties": {
         "schemaVersion": {"const": 2},
         "iconUrl": {"type": "string", "minLength": 1, "pattern": "^https?://"},
+        "cardKind": {"enum": ["weekly", "node"]},
+        "node": {"type": "string", "minLength": 1, "maxLength": 50},
         "title": {"type": "string", "minLength": 1, "maxLength": 100},
-        "reportUrl": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": r"^(https?://|dingtalk://dingtalkclient/page/link\?web_wnd=workbench&url=)",
-        },
+        "reportUrl": {"type": "string", "maxLength": 2048},
         "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
         "summaryMarkdown": BRIEFING_PROPERTIES["summaryMarkdown"],
         "riskMarkdown": BRIEFING_PROPERTIES["riskMarkdown"],
@@ -127,7 +123,7 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
             "uniqueItems": True,
             "items": {"type": "string", "minLength": 1, "maxLength": 50},
         },
-        "reportPeriod": {"type": "string", "minLength": 1, "maxLength": 100},
+        "reportPeriod": {"type": "string", "maxLength": 100},
         "customer": {"type": "string", "minLength": 1, "maxLength": 100},
         "week": {"type": "string", "minLength": 1, "maxLength": 50},
         "collector": {"type": "string", "minLength": 1, "maxLength": 100},
@@ -149,6 +145,47 @@ HTML_FORM_DATA_SCHEMA: dict[str, Any] = {
         },
         "formDisabled": {"type": "boolean"},
     },
+    # cardKind 缺省视为 weekly（周报卡保持原有强校验）；
+    # node（节点卡）要求 node 字段，放宽 reportUrl/reportPeriod，
+    # 并禁止 riskMarkdown/nextWeekMarkdown（节点卡没有这两段）。
+    "allOf": [
+        {
+            "if": {
+                "not": {
+                    "required": ["cardKind"],
+                    "properties": {"cardKind": {"const": "node"}},
+                }
+            },
+            "then": {
+                "required": ["reportUrl", "reportPeriod"],
+                "properties": {
+                    "reportUrl": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": r"^(https?://|dingtalk://dingtalkclient/page/link\?web_wnd=workbench&url=)",
+                    },
+                    "reportPeriod": {"type": "string", "minLength": 1},
+                },
+            },
+        },
+        {
+            "if": {
+                "required": ["cardKind"],
+                "properties": {"cardKind": {"const": "node"}},
+            },
+            "then": {
+                "required": ["node"],
+                "properties": {
+                    "reportUrl": {
+                        "type": "string",
+                        "pattern": r"^(|https?://.+|dingtalk://dingtalkclient/page/link\?web_wnd=workbench&url=.+)$",
+                    },
+                    "riskMarkdown": {"maxItems": 0},
+                    "nextWeekMarkdown": {"maxItems": 0},
+                },
+            },
+        },
+    ],
     "$defs": {
         "project": {
             "type": "object",
@@ -168,22 +205,17 @@ MARKDOWN_DATA_SCHEMA: dict[str, Any] = {
     "required": [
         "schemaVersion",
         "title",
-        "reportPeriod",
-        "reportUrl",
         "summaryMarkdown",
         "feedbackUrl",
         "recipientName",
     ],
     "properties": {
         "schemaVersion": {"const": 1},
+        "cardKind": {"enum": ["weekly", "node"]},
+        "node": {"type": "string", "minLength": 1, "maxLength": 50},
         "title": {"type": "string", "minLength": 1, "maxLength": 100},
-        "reportPeriod": {"type": "string", "minLength": 1, "maxLength": 100},
-        "reportUrl": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048,
-            "pattern": "^https?://",
-        },
+        "reportPeriod": {"type": "string", "maxLength": 100},
+        "reportUrl": {"type": "string", "maxLength": 2048},
         "reportLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
         "summaryMarkdown": BRIEFING_PROPERTIES["summaryMarkdown"],
         "riskMarkdown": BRIEFING_PROPERTIES["riskMarkdown"],
@@ -197,6 +229,43 @@ MARKDOWN_DATA_SCHEMA: dict[str, Any] = {
         "feedbackLinkText": {"type": "string", "minLength": 1, "maxLength": 50},
         "recipientName": {"type": "string", "minLength": 1, "maxLength": 100},
     },
+    # cardKind 缺省视为 weekly（周报卡保持原有强校验）；
+    # node（节点卡）副标题/表头切到节点字段，reportUrl 仅留档、可为空。
+    "allOf": [
+        {
+            "if": {
+                "not": {
+                    "required": ["cardKind"],
+                    "properties": {"cardKind": {"const": "node"}},
+                }
+            },
+            "then": {
+                "required": ["reportUrl", "reportPeriod"],
+                "properties": {
+                    "reportUrl": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^https?://",
+                    },
+                    "reportPeriod": {"type": "string", "minLength": 1},
+                },
+            },
+        },
+        {
+            "if": {
+                "required": ["cardKind"],
+                "properties": {"cardKind": {"const": "node"}},
+            },
+            "then": {
+                "required": ["node"],
+                "properties": {
+                    "reportUrl": {"type": "string", "pattern": "^(|https?://.+)$"},
+                    "riskMarkdown": {"maxItems": 0},
+                    "nextWeekMarkdown": {"maxItems": 0},
+                },
+            },
+        },
+    ],
     "additionalProperties": False,
 }
 
@@ -476,9 +545,11 @@ def gen_html_card(
         raise ToolError(
             f"cannot read --template path {str(template_path)!r}: {error}"
         ) from error
-    rendered = replace_data_block(
-        template, {**data, "reportUrl": build_dingtalk_workbench_link(data["reportUrl"])}
-    )
+    rendered_data = dict(data)
+    report_url = (rendered_data.get("reportUrl") or "").strip()
+    if report_url:
+        rendered_data["reportUrl"] = build_dingtalk_workbench_link(report_url)
+    rendered = replace_data_block(template, rendered_data)
     rendered = replace_html_title(rendered, data["title"])
     configured = configure_html_runtime(rendered, submit_url, data["readCallbackUrl"])
     generated_html, generated_runtime = externalize_html_runtime(configured)
@@ -526,26 +597,37 @@ def normalize_hosted_site_url(url: str) -> str:
 
 
 def render_markdown(data: dict[str, Any]) -> str:
-    # IM 消息只保留本周进展要点（最多 3 条）。风险 · 关注 / 下周重点即使传了也不外显，
-    # 用「更多信息……」引导客户点开反馈页查看完整周报。
+    card_kind = data.get("cardKind", "weekly")
     progress_items = list(data["summaryMarkdown"])[:3]
     progress_lines = [f"- {line}" for line in progress_items]
-    risk = data.get("riskMarkdown") or []
-    next_week = data.get("nextWeekMarkdown") or []
-    if risk or next_week:
-        progress_lines.append("- 更多信息……")
 
-    summary = "**本周进展**\n" + "\n".join(progress_lines)
+    if card_kind == "node":
+        # 节点卡：副标题与表头切到节点字段；风险/下周重点不出现。
+        report_period = f"当前项目节点：{data['node']}"
+        summary = "**本次进展**\n" + "\n".join(progress_lines)
+        feedback_link_text = data.get(
+            "feedbackLinkText", "确认本次进展并反馈您的意见"
+        )
+    else:
+        # 周报卡：IM 消息只保留本周进展要点（最多 3 条）。风险 · 关注 / 下周重点
+        # 即使传了也不外显，用「更多信息……」引导客户点开反馈页查看完整周报。
+        report_period = f"周期：{data['reportPeriod']}"
+        risk = data.get("riskMarkdown") or []
+        next_week = data.get("nextWeekMarkdown") or []
+        if risk or next_week:
+            progress_lines.append("- 更多信息……")
+        summary = "**本周进展**\n" + "\n".join(progress_lines)
+        feedback_link_text = data.get(
+            "feedbackLinkText", "查看完整周报并反馈您的意见"
+        )
 
     # 完整周报链接（reportUrl）不外显：客户需点开反馈入口才能看到完整周报，
     # 避免只读链接不填反馈。
     return MARKDOWN_TEMPLATE.substitute(
         title=data["title"],
-        report_period=data["reportPeriod"],
+        report_period=report_period,
         summary=summary,
-        feedback_link_text=data.get(
-            "feedbackLinkText", "查看完整周报并反馈您的意见"
-        ),
+        feedback_link_text=feedback_link_text,
         feedback_url=build_dingtalk_workbench_link(data["feedbackUrl"]),
     )
 

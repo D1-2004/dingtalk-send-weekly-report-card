@@ -1,6 +1,6 @@
 ---
 name: dingtalk-send-weekly-report-card
-description: Use when 用户提供周报链接或周报内容，并要求生成可填写的周报反馈网页，或发送带反馈入口的钉钉 Markdown 周报回访消息。
+description: Use when 用户提供周报链接或周报内容，要求生成可填写的周报反馈网页或发送带反馈入口的钉钉 Markdown 周报回访消息；或 PM 提供项目节点与本次进展，要求生成项目进展反馈卡（节点卡）或发送带反馈入口的进展确认消息。
 ---
 
 # 钉钉周报回访
@@ -21,6 +21,8 @@ scripts/weekly_report_tool.py gen-card
 - `html`：生成符合 Multica Site CSP 的响应式网页构建产物，供 Multica Site 托管。
 
 网页只收集一份整体反馈（整页一组满意度，不按项目拆分）。客户与项目只读展示，用户填写一次满意度、不满意原因和更多反馈。提交给 Webhook 的数据协议见 `assets/weekly-feedback-webhook.schema.json`。
+
+除周报卡（默认）外，还支持**项目节点反馈卡（节点卡）**：PM 只确认单个项目节点与本次进展、没有完整周报时，数据传 `cardKind: "node"`（见「项目节点反馈卡」一节）。节点卡的反馈收集、托管与发送确认规则与周报卡完全一致。
 
 ## 环境检查
 
@@ -43,6 +45,18 @@ scripts/weekly_report_tool.py gen-card
 8. HTML 发布成功且 Markdown 命令返回 `success: true` 后，直接输出结果中的 `markdown` 全文，遵循下方「卡片撰写与输出方案」。
 
 HTML 发布失败时，不发送缺少反馈入口或使用本地文件地址的消息。
+
+## 项目节点反馈卡
+
+PM 只提供某个项目节点与本次进展（无完整周报）时，生成节点卡：HTML 数据与 Markdown 数据都传 `cardKind: "node"`，并传 `node` 字段。工作流、Multica 托管、「发送与确认规则」与周报卡完全一致。
+
+1. **标题**：`{项目名}进展`（如"智能助理项目进展"），不带"周报"等字样。项目名优先用 LTC 底表规范全名。
+2. **节点 `node`**：必填。标准快捷节点：`测试验证`、`上线准备`、`试运行`、`验收`；PM 自定义节点名优先。
+3. **版式自动切换**：副标题渲染为「当前项目节点：<节点>」，进展区表头为「本次进展」。周报卡的「周期：」表头、「本周进展」、「风险 · 关注」、「下周重点」**不得出现在节点卡中**——节点卡数据不得传 `riskMarkdown` / `nextWeekMarkdown`（传了命令直接校验报错）。
+4. **本次进展 `summaryMarkdown`**：从 PM 提供的进展材料提炼，**最多 3 条**、单条 ≤ 120 字，面向客户、不编造；需要贵司确认/提供/配合的条目整条加粗（同周报卡规则）。
+5. **进展链接入口（关键规则）**：仅当 PM 明确提供完整进展材料或可访问链接时，才传 `reportUrl`（并可配 `reportLinkText`，如「查看完整项目进展」「查看项目进展详情」「查看项目进展并确认您的满意度」）；**PM 未提供时必须不传 `reportUrl`（或传空字符串），网页会整项隐藏链接入口，连占位文字都不出现**。不得猜测、拼接或复用旧链接充当进展入口。
+6. `reportPeriod` 在节点卡中可省略；`week` 仍必填（填生成当日 ISO 周次），`customer`、`projects`、`collector`、`reportTime`、`outTrackId` 等其余字段规则同周报卡。Webhook 与已读上报的协议字段不变（节点卡无链接时 `reportUrl` 落空字符串，线上流按可选文本落表）。
+7. Markdown 消息节点卡入口文案默认「确认本次进展并反馈您的意见」（可用 `feedbackLinkText` 覆盖）。
 
 ## 发送与确认规则
 
@@ -89,8 +103,10 @@ HTML 模式需要部署方注入 `WEEKLY_FEEDBACK_SUBMIT_URL` 和 `WEEKLY_FEEDBA
 | --- | --- |
 | 周报链接 | 用户消息中的原始链接 |
 | 客户 | 用户明确说明优先，否则从周报标题和正文提取，可对照底表 `客户名称` |
-| 标题 | 通常为“{客户或项目}周报”，不带“回访”等内部用词 |
-| 时间周期、周次 | 周报正文；缺少周次时根据日期范围计算 ISO 周次 |
+| 标题 | 周报卡通常为“{客户或项目}周报”，节点卡为“{项目名}进展”，均不带“回访”等内部用词 |
+| 时间周期、周次 | 周报正文；缺少周次时根据日期范围计算 ISO 周次；节点卡无周期时填生成当日 ISO 周次 |
+| 卡片类型 `cardKind` | 周报卡省略不传（默认）；节点卡传 `"node"`，版式与必填字段按「项目节点反馈卡」一节切换 |
+| 项目节点 `node` | 仅节点卡必填：PM 确认的节点名，标准快捷节点 测试验证/上线准备/试运行/验收，PM 自定义优先 |
 | 本周进展 `summaryMarkdown` | **先写"做成了什么"**：可交付成果、上线/完成的功能、关键里程碑（如"意图识别模型完成迭代，准确率 +3%"），一条一句、客户视角可读、文字精炼；数量（新增需求/工单等）只作佐证放句末或括号，禁止只有流水数字、看不出内容。**最多 3 条**、单条 ≤ 120 字，细节留给完整周报，不编造 |
 | 风险 · 关注 `riskMarkdown` | 从周报正文提炼需客户知悉的风险/待办，**最多 3 条**、单条 ≤ 120 字，可为空数组；与底表 `风险级别`、`是否超期` 相互印证但不编造 |
 | 下周重点 `nextWeekMarkdown` | 从周报"下周计划"提炼**最多 3 条**将推进事项，客户视角可读、可验收、文字精炼，可为空数组；不编造 |
@@ -121,9 +137,10 @@ Agent 输出的周报卡片必须可直接转发：直接输出 `gen-card` 返�
 HTML 输入样例见 `assets/weekly-feedback-html-data.example.json`。必填字段为：
 
 - `schemaVersion`：固定为 `2`。
-- `title`、`reportUrl`、`reportPeriod`、`customer`、`week`、`collector`、`reportTime`、`outTrackId`：非空字符串；`outTrackId` 必须使用卡片实例的同名值，并作为落表字段「编号」的值。
+- `title`、`customer`、`week`、`collector`、`reportTime`、`outTrackId`：非空字符串；`outTrackId` 必须使用卡片实例的同名值，并作为落表字段「编号」的值。
+- `reportUrl`、`reportPeriod`：非空字符串（周报卡）；节点卡（`cardKind: "node"`）可省略，省略或传空时网页整项隐藏链接入口。
 - `reportUrl`：钉钉工作台深链，目标为完整周报的原始网页地址；命令兼容原始 HTTP(S) 输入并统一转换，写入 HTML 数据块的是深链，已有深链不会重复嵌套或编码。
-- `summaryMarkdown`：本周进展字符串数组。
+- `summaryMarkdown`：本周进展字符串数组（节点卡为「本次进展」）。
 - `projects`：只读项目数组，每项包含唯一 `id` 和 `name`。
 - `dissatisfactionOptions`：不满意原因快捷选项数组，**固定为四项**：`产品能力不满足期望`、`交付进度不满意`、`沟通响应不及时`、`其他`。
 
@@ -156,11 +173,11 @@ Webhook 成功响应只表示请求已受理，自动化执行是异步的。使
 
 ### Markdown 消息
 
-Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。`recipientName` 默认填发起人（谁给周报就发给谁确认），外发客户/群的唯一例外见「发送与确认规则」。
+Markdown 输入样例见 `assets/weekly-report-markdown-data.example.json`。必填字段为 `schemaVersion`、`title`、`reportPeriod`、`reportUrl`、`summaryMarkdown`、`feedbackUrl` 和 `recipientName`；可选 `riskMarkdown`、`nextWeekMarkdown`。节点卡（`cardKind: "node"`）改传 `node`，`reportPeriod` / `reportUrl` 可省略，`riskMarkdown` / `nextWeekMarkdown` 禁止传入。`recipientName` 默认填发起人（谁给周报就发给谁确认），外发客户/群的唯一例外见「发送与确认规则」。
 
 **完整周报链接不外显**：`reportUrl` 仅作数据留档与追溯，消息正文不渲染该链接——客户必须点开反馈入口进入网页后才能看到完整周报，避免"只读链接、不填反馈"。反馈入口文案默认「查看完整周报并反馈您的意见」（可用 `feedbackLinkText` 覆盖）。
 
-**IM 消息只留本周进展要点**：即使传入了 `riskMarkdown` / `nextWeekMarkdown`，Markdown 消息也只外显「本周进展」（最多 3 条），末尾追加一行「- 更多信息……」引导客户点开反馈页看完整周报。风险 · 关注 / 下周重点仍在反馈页里完整呈现，只是不在 IM 里挤屏。
+**IM 消息只留本周进展要点**：即使传入了 `riskMarkdown` / `nextWeekMarkdown`，Markdown 消息也只外显「本周进展」（最多 3 条），末尾追加一行「- 更多信息……」引导客户点开反馈页看完整周报。风险 · 关注 / 下周重点仍在反馈页里完整呈现，只是不在 IM 里挤屏。节点卡同理只外显「本次进展」（无「更多信息……」行）。
 
 命令会将原始 HTTPS `feedbackUrl` 转换为钉钉工作台深链，并使用当前登录态发送消息。Agent 不自行拼接 Markdown、深链或底层发送命令：
 

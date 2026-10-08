@@ -68,6 +68,28 @@ def markdown_data() -> dict:
     }
 
 
+def node_html_data() -> dict:
+    data = html_data()
+    data.pop("reportUrl", None)
+    data.pop("reportLinkText", None)
+    data.pop("reportPeriod", None)
+    data["cardKind"] = "node"
+    data["node"] = "测试验证"
+    data["title"] = "智能助理项目进展"
+    return data
+
+
+def node_markdown_data() -> dict:
+    data = markdown_data()
+    data.pop("reportPeriod", None)
+    data.pop("reportUrl", None)
+    data.pop("feedbackLinkText", None)
+    data["cardKind"] = "node"
+    data["node"] = "测试验证"
+    data["title"] = "智能助理项目进展"
+    return data
+
+
 def make_fake_dws(directory: Path) -> Path:
     executable = directory / "dws"
     executable.write_text(
@@ -518,6 +540,219 @@ class MarkdownDeliveryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("feedbackUrl", result.stderr)
         self.assertFalse(record.exists())
+
+
+class NodeCardTests(unittest.TestCase):
+    """节点卡（cardKind=node）：node 必填、风险/下周禁用、链接可缺省整项隐藏。"""
+
+    def setUp(self) -> None:
+        sys.path.insert(0, str(TOOL.parent))
+        import weekly_report_tool as w
+
+        self.w = w
+
+    # ---- HTML 表单数据 schema ----
+
+    def test_html_node_schema_accepts_missing_report_fields(self) -> None:
+        data = node_html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertEqual(errors, [])
+
+    def test_html_node_schema_accepts_empty_report_url(self) -> None:
+        data = node_html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data["reportUrl"] = ""
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertEqual(errors, [])
+
+    def test_html_node_schema_rejects_non_url_report_url(self) -> None:
+        data = node_html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data["reportUrl"] = "内部文档路径"
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    def test_html_node_schema_requires_node(self) -> None:
+        data = node_html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data.pop("node", None)
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    def test_html_node_schema_rejects_risk_and_next_week(self) -> None:
+        data = node_html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data["riskMarkdown"] = ["风险条目"]
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors)
+        data["riskMarkdown"] = []
+        data["nextWeekMarkdown"] = ["下周条目"]
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    def test_html_weekly_schema_still_requires_report_url(self) -> None:
+        data = html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data.pop("reportUrl", None)
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors, "周报卡缺 reportUrl 应校验失败")
+
+    def test_html_weekly_schema_still_requires_report_period(self) -> None:
+        data = html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data.pop("reportPeriod", None)
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors, "周报卡缺 reportPeriod 应校验失败")
+
+    def test_html_weekly_card_kind_explicit_is_valid(self) -> None:
+        data = html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data["cardKind"] = "weekly"
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertEqual(errors, [])
+
+    def test_html_card_kind_value_is_validated(self) -> None:
+        data = html_data()
+        data["callbackUrl"] = AITABLE_WEBHOOK_URL
+        data["readCallbackUrl"] = AITABLE_WEBHOOK_URL
+        data["cardKind"] = "monthly"
+        errors = self.w.iter_schema_errors(data, self.w.HTML_FORM_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    # ---- Markdown 数据 schema ----
+
+    def test_markdown_node_schema_accepts_missing_report_fields(self) -> None:
+        data = node_markdown_data()
+        errors = self.w.iter_schema_errors(data, self.w.MARKDOWN_DATA_SCHEMA)
+        self.assertEqual(errors, [])
+
+    def test_markdown_node_schema_requires_node(self) -> None:
+        data = node_markdown_data()
+        data.pop("node", None)
+        errors = self.w.iter_schema_errors(data, self.w.MARKDOWN_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    def test_markdown_node_schema_rejects_risk(self) -> None:
+        data = node_markdown_data()
+        data["riskMarkdown"] = ["风险条目"]
+        errors = self.w.iter_schema_errors(data, self.w.MARKDOWN_DATA_SCHEMA)
+        self.assertTrue(errors)
+
+    def test_markdown_weekly_schema_still_requires_report_url(self) -> None:
+        data = markdown_data()
+        data.pop("reportUrl", None)
+        errors = self.w.iter_schema_errors(data, self.w.MARKDOWN_DATA_SCHEMA)
+        self.assertTrue(errors, "周报卡缺 reportUrl 应校验失败")
+
+    # ---- render_markdown 节点卡分支 ----
+
+    def test_markdown_node_card_subtitle_and_header(self) -> None:
+        data = node_markdown_data()
+        rendered = self.w.render_markdown(data)
+        self.assertIn("当前项目节点：测试验证", rendered)
+        self.assertIn("**本次进展**", rendered)
+        self.assertNotIn("**本周进展**", rendered)
+        self.assertNotIn("周期：", rendered)
+        self.assertIn(data["summaryMarkdown"][0], rendered)
+        self.assertIn("确认本次进展并反馈您的意见", rendered)
+
+    def test_markdown_node_card_no_more_info_line(self) -> None:
+        data = node_markdown_data()
+        rendered = self.w.render_markdown(data)
+        self.assertNotIn("更多信息……", rendered)
+
+    def test_markdown_node_card_progress_truncated_to_three(self) -> None:
+        data = node_markdown_data()
+        data["summaryMarkdown"] = ["进展一", "进展二", "进展三", "进展四"]
+        rendered = self.w.render_markdown(data)
+        self.assertIn("进展三", rendered)
+        self.assertNotIn("进展四", rendered)
+
+    # ---- CLI 校验与 HTML 产物 ----
+
+    def test_markdown_node_missing_node_fails_validation(self) -> None:
+        data = node_markdown_data()
+        data.pop("node", None)
+        result = run_gen_card(
+            "markdown",
+            data,
+            environment=command_environment(),
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("node", result.stderr)
+
+    def test_html_node_card_generation_and_link_hiding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "node-feedback.html"
+            result = run_gen_card(
+                "html",
+                node_html_data(),
+                output=output,
+                environment=command_environment(
+                    submit_url=AITABLE_WEBHOOK_URL,
+                    read_url=READ_WEBHOOK_URL,
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            command_result = json.loads(result.stdout)
+            generated_html = output.read_text(encoding="utf-8")
+            generated_runtime = (
+                output.parent / "weekly-feedback-app.js"
+            ).read_text(encoding="utf-8")
+            generated_data = extract_html_data(output)
+
+        self.assertEqual(command_result["success"], True)
+        self.assertEqual(command_result["type"], "html")
+        self.assertEqual(generated_data["cardKind"], "node")
+        self.assertEqual(generated_data["node"], "测试验证")
+        self.assertNotIn("reportUrl", generated_data)
+        self.assertEqual(generated_data["callbackUrl"], AITABLE_WEBHOOK_URL)
+        self.assertEqual(generated_data["readCallbackUrl"], READ_WEBHOOK_URL)
+        self.assertIn("<title>智能助理项目进展</title>", generated_html)
+        # 未提供项目文档链接时：整项隐藏的 CSS 兜底 + JS 分支必须在产物中
+        self.assertIn(".report-link[hidden] { display: none; }", generated_html)
+        self.assertIn('id="progressLabelText"', generated_html)
+        self.assertIn("reportLink.hidden = true", generated_runtime)
+        self.assertIn("当前项目节点：", generated_runtime)
+        # Webhook 协议字段保持存在：节点卡无链接时落空字符串
+        self.assertIn('"周报链接": params.reportUrl || ""', generated_runtime)
+        self.assertIn('"周报周期": params.reportPeriod || ""', generated_runtime)
+
+    def test_html_node_card_with_report_url_keeps_link(self) -> None:
+        data = node_html_data()
+        data["reportUrl"] = "https://alidocs.dingtalk.com/i/nodes/node-doc"
+        data["reportLinkText"] = "查看项目进展详情"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "node-feedback.html"
+            result = run_gen_card(
+                "html",
+                data,
+                output=output,
+                environment=command_environment(
+                    submit_url=AITABLE_WEBHOOK_URL,
+                    read_url=READ_WEBHOOK_URL,
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated_data = extract_html_data(output)
+
+        self.assertEqual(
+            generated_data["reportUrl"],
+            "dingtalk://dingtalkclient/page/link?web_wnd=workbench&url="
+            + quote(data["reportUrl"], safe=""),
+        )
+        self.assertEqual(generated_data["reportLinkText"], "查看项目进展详情")
 
 
 class SummaryAndIconUrlTests(unittest.TestCase):

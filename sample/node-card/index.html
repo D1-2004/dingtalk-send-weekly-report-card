@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智能助理项目进展</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #F5F6F8;
+        --card: #ffffff;
+        --ink: #111827;
+        --sub: #6B7280;
+        --faint: #9CA3AF;
+        --brand: #1677FF;
+        --brand-soft: #EAF3FF;
+        --line: #E5E7EB;
+        --field-bg: #F5F6F8;
+        --ok: #1F9D55;
+        --warn: #C4791A;
+        --danger: #E5484D;
+        --radius: 16px;
+      }
+
+      * { box-sizing: border-box; }
+      html { background: var(--page); }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 24px 16px;
+        color: var(--ink);
+        background: var(--page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button, input, textarea { font: inherit; }
+      button, summary, label, a { -webkit-tap-highlight-color: transparent; }
+
+      .feedback-card {
+        width: min(100%, 600px);
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--card);
+        box-shadow: 0 10px 30px rgba(31, 35, 41, 0.06);
+      }
+
+      .card-content { padding: 22px; }
+
+      .card-head { display: flex; align-items: flex-start; gap: 12px; }
+      .head-ic {
+        flex: none; width: 36px; height: 36px; border-radius: 9px;
+        background: var(--brand-soft); color: var(--brand);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .head-ic svg { width: 20px; height: 20px; }
+      .head-txt { min-width: 0; }
+      .card-title { margin: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; }
+      .period { margin: 4px 0 0; color: var(--sub); font-size: 12px; line-height: 1.4; }
+
+      .report-link {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 14px; min-height: 20px;
+        color: var(--brand); font-size: 14px; font-weight: 500; text-decoration: none;
+      }
+      .report-link__icon { display: inline-flex; }
+      .report-link__icon svg { width: 16px; height: 16px; }
+      .report-link[hidden] { display: none; }
+
+      .summary-panel {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .summary-block { padding: 14px 16px; }
+      .summary-block + .summary-block { border-top: 1px solid var(--line); }
+      .summary-block[hidden] { display: none; }
+      .summary-label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--sub); }
+      .summary-label svg { width: 16px; height: 16px; flex: none; }
+      .summary-block .summary-label { color: var(--ok); }
+      .summary-block.risk .summary-label { color: var(--warn); }
+      .summary-block.next .summary-label { color: var(--brand); }
+      .summary-list { margin: 0; padding-left: 18px; }
+      .summary-list li { font-size: 14px; line-height: 1.7; margin: 6px 0; color: var(--ink); }
+      .summary-list li b { font-weight: 600; }
+
+      .feedback-form { display: grid; gap: 20px; padding-top: 20px; }
+      .form-section { display: grid; gap: 8px; }
+      .form-label {
+        margin: 0; padding: 0; color: var(--sub); font-size: 13px; font-weight: 500;
+      }
+      .required-mark { margin-left: 3px; color: var(--danger); }
+      .readonly-value { font-size: 14px; line-height: 1.6; color: var(--ink); }
+
+      .project-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+      .project-tag {
+        display: inline-flex; align-items: center; min-height: 24px;
+        padding: 3px 9px; border-radius: 6px; color: var(--sub);
+        background: var(--field-bg); font-size: 12px;
+      }
+
+      .choice-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .choice-options.is-invalid { padding: 8px; border-radius: 12px; background: rgba(229, 72, 77, 0.08); }
+      .choice-option {
+        position: relative; display: flex; min-height: 40px; cursor: pointer;
+        align-items: center; justify-content: center; gap: 8px; width: 100%;
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px;
+        background: var(--card); font-size: 15px; color: var(--ink);
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+      .choice-option input { position: static; opacity: 1; width: 18px; height: 18px; margin: 0; flex: none; cursor: pointer; accent-color: var(--brand); }
+      .choice-option.is-checked { border-color: #B7BFC9; background: #EEF1F4; font-weight: 600; }
+
+      .reason-section { display: grid; }
+      .reason-section[hidden] { display: none; }
+      .reason-box { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; }
+      .reason-title { margin: 0 0 8px; color: var(--sub); font-size: 13px; }
+      .reason-options { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+      .reason-option {
+        display: inline-flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px;
+        padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card); font-size: 13px; color: var(--ink);
+      }
+      .reason-option:has(input:checked) { border-color: #B7BFC9; background: #EEF1F4; }
+      .reason-option input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--brand); flex: none; }
+      .reason-other { margin-top: 10px; }
+      .reason-other[hidden] { display: none; }
+
+      .feedback-input {
+        width: 100%; height: 42px; padding: 0 12px;
+        border: 1px solid var(--line); border-radius: 10px;
+        color: var(--ink); background: var(--card); font-size: 14px;
+      }
+      .feedback-input::placeholder { color: var(--faint); }
+
+      .submit-area { display: flex; flex-direction: column; align-items: center; }
+      .submit-button {
+        width: auto; min-width: 200px; min-height: 40px; cursor: pointer; border: 0; border-radius: 10px;
+        padding: 0 28px; color: #fff; background: var(--brand); font-size: 14px; font-weight: 600;
+      }
+      .submit-button:disabled { cursor: not-allowed; background: #C9CED6; color: #fff; }
+      .submit-message { min-height: 20px; margin: 8px 0 0; color: var(--sub); font-size: 13px; text-align: center; }
+      .submit-message.is-error { color: var(--danger); }
+
+      .feedback-card.is-submitted input,
+      .feedback-card.is-submitted textarea,
+      .feedback-card.is-submitted summary { cursor: not-allowed; opacity: 0.68; }
+
+      .data-error { padding: 26px 22px; }
+      .data-error__title { margin: 0; color: var(--danger); font-size: 20px; }
+      .data-error__message { margin: 10px 0 0; color: var(--sub); font-size: 14px; line-height: 1.6; }
+
+      a:focus-visible, button:focus-visible, input:focus-visible,
+      textarea:focus-visible, summary:focus-visible {
+        outline: 3px solid rgba(22, 119, 255, 0.24); outline-offset: 2px;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        .report-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+        .choice-option:hover, .feedback-input:hover, .reason-option:hover { border-color: #CBD2DA; }
+        .submit-button:hover:not(:disabled) { background: #0E5FD8; }
+      }
+
+      @media (max-width: 560px) {
+        body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+        .feedback-card { border-radius: 14px; }
+        .card-content { padding: 18px 16px 16px; }
+        .card-title { font-size: 18px; }
+        .summary-block { padding: 12px 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="feedback-card" id="feedbackCard" aria-labelledby="cardTitle">
+      <div class="card-content">
+        <header class="card-head">
+          <span class="head-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15h6M9 9h2"/></svg>
+          </span>
+          <div class="head-txt">
+            <h1 class="card-title" id="cardTitle"></h1>
+            <p class="period" id="reportPeriod"></p>
+          </div>
+        </header>
+
+        <a class="report-link" id="reportLink" target="_blank" rel="noopener noreferrer">
+          <span class="report-link__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg></span>
+          <span id="reportLinkText"></span>
+        </a>
+
+        <div class="summary-panel">
+        <section class="summary-block" id="progressBlock">
+          <div class="summary-label" id="progressLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span id="progressLabelText">本周进展</span></div>
+          <ul class="summary-list" id="progressList"></ul>
+        </section>
+        <section class="summary-block risk" id="riskBlock">
+          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.8 20h18.4z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>风险 · 关注</div>
+          <ul class="summary-list" id="riskList"></ul>
+        </section>
+
+        <section class="summary-block next" id="nextWeekBlock">
+          <div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>下周重点</div>
+          <ul class="summary-list" id="nextWeekList"></ul>
+        </section>
+
+        </div>
+
+        <form class="feedback-form" id="feedbackForm" novalidate>
+          <section class="form-section">
+            <p class="form-label">进行中的项目</p>
+            <div class="project-tags" id="projectNames"></div>
+          </section>
+
+          <section class="form-section">
+            <p class="form-label">本次服务是否满意<span class="required-mark" aria-hidden="true">*</span></p>
+            <div class="choice-options" id="satisfactionOptions"></div>
+          </section>
+
+          <section class="reason-section" id="dissatisfactionReasons" hidden>
+            <div class="reason-box">
+              <p class="reason-title">请选择让您不满意的原因（可多选）</p>
+              <div class="reason-options" id="reasonOptions"></div>
+              <div class="reason-other" id="reasonOtherWrap" hidden>
+                <input
+                  class="feedback-input"
+                  id="reasonOtherInput"
+                  type="text"
+                  maxlength="200"
+                  placeholder="请补充「其他」的具体情况"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <label class="form-label" for="feedbackInput">更多反馈</label>
+            <input
+              class="feedback-input"
+              id="feedbackInput"
+              type="text"
+              maxlength="500"
+              placeholder="欢迎补充更多反馈（选填）"
+            />
+          </section>
+
+          <div class="submit-area">
+            <button class="submit-button" id="submitButton" type="submit"></button>
+            <p class="submit-message" id="submitMessage" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </div>
+    </article>
+
+    <!--
+      WeeklyFeedbackFormData v2：生成时只替换本标签内的严格 JSON。
+      projects 只描述只读项目；满意度、原因和反馈是整张表单的单值。
+    -->
+    <script type="application/json" id="weeklyFeedbackFormData">
+      {
+        "schemaVersion": 2,
+        "cardKind": "node",
+        "node": "测试验证",
+        "title": "智能助理项目进展",
+        "summaryMarkdown": [
+          "意图识别模型完成迭代，准确率提升 3%",
+          "数据看板大屏渲染完成，导出功能已上线",
+          "**需要贵司确认**：智能助理二期需求范围，以便安排评审"
+        ],
+        "projects": [
+          {
+            "id": "p1",
+            "name": "智能助理项目"
+          }
+        ],
+        "satisfaction": "",
+        "dissatisfactionReasons": [],
+        "feedback": "",
+        "dissatisfactionOptions": [
+          "产品能力不满足期望",
+          "交付进度不满意",
+          "沟通响应不及时",
+          "其他"
+        ],
+        "customer": "测试",
+        "week": "2026-W41",
+        "collector": "孙潇页",
+        "reportTime": "2026-10-08 16:15:00",
+        "outTrackId": "TEST-NODE-2026-W41",
+        "callbackUrl": "https://connector.dingtalk.com/webhook/flow/103b2bb12b6b212c3a440006",
+        "readCallbackUrl": "https://connector.dingtalk.com/webhook/flow/103b2bb12b6b212c3a440007"
+      }
+    </script>
+
+    <script src="./weekly-feedback-app.js"></script>
+
+
+  </body>
+</html>
